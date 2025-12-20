@@ -1,56 +1,55 @@
+
 package main
 
 import (
-	"encoding/json"
-	"fmt"
+	"errors"
 	"regexp"
 	"strings"
 )
 
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+
 type UserData struct {
-	Email    string `json:"email"`
-	Username string `json:"username"`
-	Age      int    `json:"age"`
+	Email    string
+	Username string
+	Age      int
 }
 
-func ValidateEmail(email string) bool {
-	pattern := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
-	matched, _ := regexp.MatchString(pattern, email)
-	return matched
+func ValidateEmail(email string) error {
+	if !emailRegex.MatchString(email) {
+		return errors.New("invalid email format")
+	}
+	return nil
 }
 
 func SanitizeUsername(username string) string {
-	username = strings.TrimSpace(username)
-	username = strings.ToLower(username)
-	return username
+	return strings.TrimSpace(username)
 }
 
-func ProcessUserData(rawData []byte) (*UserData, error) {
-	var data UserData
-	err := json.Unmarshal(rawData, &data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
+func ValidateAge(age int) error {
+	if age < 0 || age > 150 {
+		return errors.New("age must be between 0 and 150")
 	}
-
-	if !ValidateEmail(data.Email) {
-		return nil, fmt.Errorf("invalid email format: %s", data.Email)
-	}
-
-	data.Username = SanitizeUsername(data.Username)
-
-	if data.Age < 0 || data.Age > 150 {
-		return nil, fmt.Errorf("age out of valid range: %d", data.Age)
-	}
-
-	return &data, nil
+	return nil
 }
 
-func main() {
-	jsonData := []byte(`{"email":"test@example.com","username":"  JohnDoe  ","age":25}`)
-	processedData, err := ProcessUserData(jsonData)
-	if err != nil {
-		fmt.Printf("Error processing data: %v\n", err)
-		return
+func ProcessUserInput(email, username string, age int) (*UserData, error) {
+	if err := ValidateEmail(email); err != nil {
+		return nil, err
 	}
-	fmt.Printf("Processed data: %+v\n", processedData)
+
+	sanitizedUsername := SanitizeUsername(username)
+	if sanitizedUsername == "" {
+		return nil, errors.New("username cannot be empty")
+	}
+
+	if err := ValidateAge(age); err != nil {
+		return nil, err
+	}
+
+	return &UserData{
+		Email:    email,
+		Username: sanitizedUsername,
+		Age:      age,
+	}, nil
 }
