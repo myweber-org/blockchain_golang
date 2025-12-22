@@ -2,66 +2,63 @@
 package main
 
 import (
+	"encoding/csv"
 	"fmt"
-	"strings"
+	"os"
 )
 
-type DataCleaner struct {
-	seen map[string]bool
-}
-
-func NewDataCleaner() *DataCleaner {
-	return &DataCleaner{
-		seen: make(map[string]bool),
+func removeDuplicates(inputFile, outputFile string) error {
+	inFile, err := os.Open(inputFile)
+	if err != nil {
+		return err
 	}
-}
+	defer inFile.Close()
 
-func (dc *DataCleaner) Normalize(input string) string {
-	return strings.ToLower(strings.TrimSpace(input))
-}
-
-func (dc *DataCleaner) IsDuplicate(value string) bool {
-	normalized := dc.Normalize(value)
-	if dc.seen[normalized] {
-		return true
+	reader := csv.NewReader(inFile)
+	records, err := reader.ReadAll()
+	if err != nil {
+		return err
 	}
-	dc.seen[normalized] = true
-	return false
-}
 
-func (dc *DataCleaner) AddItem(value string) bool {
-	normalized := dc.Normalize(value)
-	if dc.seen[normalized] {
-		return false
+	seen := make(map[string]bool)
+	var uniqueRecords [][]string
+
+	for _, record := range records {
+		if len(record) > 0 {
+			key := record[0]
+			if !seen[key] {
+				seen[key] = true
+				uniqueRecords = append(uniqueRecords, record)
+			}
+		}
 	}
-	dc.seen[normalized] = true
-	return true
-}
 
-func (dc *DataCleaner) UniqueCount() int {
-	return len(dc.seen)
-}
+	outFile, err := os.Create(outputFile)
+	if err != nil {
+		return err
+	}
+	defer outFile.Close()
 
-func (dc *DataCleaner) Reset() {
-	dc.seen = make(map[string]bool)
+	writer := csv.NewWriter(outFile)
+	defer writer.Flush()
+
+	return writer.WriteAll(uniqueRecords)
 }
 
 func main() {
-	cleaner := NewDataCleaner()
-	
-	samples := []string{"  Apple  ", "apple", "BANANA", "banana ", "Cherry"}
-	
-	for _, item := range samples {
-		if cleaner.AddItem(item) {
-			fmt.Printf("Added: '%s'\n", item)
-		} else {
-			fmt.Printf("Duplicate skipped: '%s'\n", item)
-		}
+	if len(os.Args) != 3 {
+		fmt.Println("Usage: data_cleaner <input.csv> <output.csv>")
+		os.Exit(1)
 	}
-	
-	fmt.Printf("Total unique items: %d\n", cleaner.UniqueCount())
-	
-	cleaner.Reset()
-	fmt.Println("Cleaner has been reset")
-	fmt.Printf("Items after reset: %d\n", cleaner.UniqueCount())
+
+	inputFile := os.Args[1]
+	outputFile := os.Args[2]
+
+	err := removeDuplicates(inputFile, outputFile)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Successfully cleaned data. Output saved to %s\n", outputFile)
 }
