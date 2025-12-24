@@ -73,4 +73,12 @@ func main() {
 
 	valid := cleaner.ValidateEmails()
 	fmt.Printf("Valid records: %d\n", len(valid))
+}package utils
+
+import "strings"
+
+func SanitizeInput(input string) string {
+    trimmed := strings.TrimSpace(input)
+    cleaned := strings.Join(strings.Fields(trimmed), " ")
+    return cleaned
 }
