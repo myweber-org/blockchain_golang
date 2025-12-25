@@ -64,7 +64,7 @@ func decryptFile(inputPath, outputPath string, key []byte) error {
 	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
 	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		return fmt.Errorf("decrypt data: %w", err)
+		return fmt.Errorf("decrypt: %w", err)
 	}
 
 	if err := os.WriteFile(outputPath, plaintext, 0644); err != nil {
@@ -75,39 +75,19 @@ func decryptFile(inputPath, outputPath string, key []byte) error {
 }
 
 func main() {
-	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		fmt.Printf("Failed to generate key: %v\n", err)
-		return
-	}
-
-	inputFile := "test_data.txt"
-	encryptedFile := "encrypted.dat"
-	decryptedFile := "decrypted.txt"
-
-	testData := []byte("This is a secret message for encryption testing.")
-	if err := os.WriteFile(inputFile, testData, 0644); err != nil {
-		fmt.Printf("Failed to create test file: %v\n", err)
-		return
-	}
-
-	fmt.Println("Encrypting file...")
-	if err := encryptFile(inputFile, encryptedFile, key); err != nil {
+	key := []byte("32-byte-long-key-here-1234567890ab")
+	
+	err := encryptFile("plain.txt", "encrypted.bin", key)
+	if err != nil {
 		fmt.Printf("Encryption failed: %v\n", err)
 		return
 	}
+	fmt.Println("File encrypted successfully")
 
-	fmt.Println("Decrypting file...")
-	if err := decryptFile(encryptedFile, decryptedFile, key); err != nil {
+	err = decryptFile("encrypted.bin", "decrypted.txt", key)
+	if err != nil {
 		fmt.Printf("Decryption failed: %v\n", err)
 		return
 	}
-
-	decryptedData, _ := os.ReadFile(decryptedFile)
-	fmt.Printf("Original: %s\n", testData)
-	fmt.Printf("Decrypted: %s\n", decryptedData)
-
-	os.Remove(inputFile)
-	os.Remove(encryptedFile)
-	os.Remove(decryptedFile)
+	fmt.Println("File decrypted successfully")
 }
