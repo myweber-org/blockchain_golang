@@ -96,4 +96,63 @@ func parseInt(s string) (int, error) {
 		return 0, errors.New("invalid integer value")
 	}
 	return result, nil
+}package config
+
+import (
+    "fmt"
+    "io/ioutil"
+    "gopkg.in/yaml.v2"
+)
+
+type DatabaseConfig struct {
+    Host     string `yaml:"host"`
+    Port     int    `yaml:"port"`
+    Username string `yaml:"username"`
+    Password string `yaml:"password"`
+    Name     string `yaml:"name"`
+}
+
+type ServerConfig struct {
+    Port         int            `yaml:"port"`
+    ReadTimeout  int            `yaml:"read_timeout"`
+    WriteTimeout int            `yaml:"write_timeout"`
+    Database     DatabaseConfig `yaml:"database"`
+}
+
+func LoadConfig(path string) (*ServerConfig, error) {
+    data, err := ioutil.ReadFile(path)
+    if err != nil {
+        return nil, fmt.Errorf("failed to read config file: %w", err)
+    }
+
+    var config ServerConfig
+    if err := yaml.Unmarshal(data, &config); err != nil {
+        return nil, fmt.Errorf("failed to parse YAML: %w", err)
+    }
+
+    if err := validateConfig(&config); err != nil {
+        return nil, fmt.Errorf("config validation failed: %w", err)
+    }
+
+    return &config, nil
+}
+
+func validateConfig(c *ServerConfig) error {
+    if c.Port <= 0 || c.Port > 65535 {
+        return fmt.Errorf("invalid server port: %d", c.Port)
+    }
+
+    if c.Database.Host == "" {
+        return fmt.Errorf("database host cannot be empty")
+    }
+
+    if c.Database.Port <= 0 || c.Database.Port > 65535 {
+        return fmt.Errorf("invalid database port: %d", c.Database.Port)
+    }
+
+    if c.Database.Name == "" {
+        return fmt.Errorf("database name cannot be empty")
+    }
+
+    return nil
 }
