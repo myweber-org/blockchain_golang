@@ -112,4 +112,39 @@ func getEnvBool(key string, defaultValue bool) bool {
 		}
 	}
 	return defaultValue
+}package config
+
+import (
+    "io/ioutil"
+    "log"
+
+    "gopkg.in/yaml.v2"
+)
+
+type Config struct {
+    Server struct {
+        Port string `yaml:"port"`
+        Host string `yaml:"host"`
+    } `yaml:"server"`
+    Database struct {
+        Name     string `yaml:"name"`
+        User     string `yaml:"user"`
+        Password string `yaml:"password"`
+    } `yaml:"database"`
+}
+
+func LoadConfig(filename string) (*Config, error) {
+    data, err := ioutil.ReadFile(filename)
+    if err != nil {
+        return nil, err
+    }
+
+    var config Config
+    err = yaml.Unmarshal(data, &config)
+    if err != nil {
+        log.Printf("Failed to unmarshal YAML: %v", err)
+        return nil, err
+    }
+
+    return &config, nil
 }
