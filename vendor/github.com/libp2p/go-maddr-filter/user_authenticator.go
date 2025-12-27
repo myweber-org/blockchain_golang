@@ -3,13 +3,13 @@ package middleware
 import (
     "net/http"
     "strings"
-    "github.com/golang-jwt/jwt/v4"
+    "github.com/dgrijalva/jwt-go"
 )
 
 type Claims struct {
     Username string `json:"username"`
     Role     string `json:"role"`
-    jwt.RegisteredClaims
+    jwt.StandardClaims
 }
 
 func AuthMiddleware(secretKey string) func(http.Handler) http.Handler {
@@ -40,7 +40,7 @@ func AuthMiddleware(secretKey string) func(http.Handler) http.Handler {
             }
 
             r.Header.Set("X-Username", claims.Username)
-            r.Header.Set("X-Role", claims.Role)
+            r.Header.Set("X-UserRole", claims.Role)
             next.ServeHTTP(w, r)
         })
     }
