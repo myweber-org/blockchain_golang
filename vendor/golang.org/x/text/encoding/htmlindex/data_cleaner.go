@@ -1,64 +1,52 @@
-
 package main
 
 import (
-	"encoding/csv"
 	"fmt"
-	"os"
+	"strings"
 )
 
-func removeDuplicates(inputFile, outputFile string) error {
-	inFile, err := os.Open(inputFile)
-	if err != nil {
-		return err
+type DataCleaner struct {
+	seen map[string]bool
+}
+
+func NewDataCleaner() *DataCleaner {
+	return &DataCleaner{
+		seen: make(map[string]bool),
 	}
-	defer inFile.Close()
+}
 
-	reader := csv.NewReader(inFile)
-	records, err := reader.ReadAll()
-	if err != nil {
-		return err
+func (dc *DataCleaner) Normalize(input string) string {
+	return strings.ToLower(strings.TrimSpace(input))
+}
+
+func (dc *DataCleaner) IsDuplicate(value string) bool {
+	normalized := dc.Normalize(value)
+	if dc.seen[normalized] {
+		return true
 	}
+	dc.seen[normalized] = true
+	return false
+}
 
-	seen := make(map[string]bool)
-	var uniqueRecords [][]string
-
-	for _, record := range records {
-		if len(record) > 0 {
-			key := record[0]
-			if !seen[key] {
-				seen[key] = true
-				uniqueRecords = append(uniqueRecords, record)
-			}
+func (dc *DataCleaner) Deduplicate(values []string) []string {
+	dc.seen = make(map[string]bool)
+	var result []string
+	for _, v := range values {
+		if !dc.IsDuplicate(v) {
+			result = append(result, v)
 		}
 	}
-
-	outFile, err := os.Create(outputFile)
-	if err != nil {
-		return err
-	}
-	defer outFile.Close()
-
-	writer := csv.NewWriter(outFile)
-	defer writer.Flush()
-
-	return writer.WriteAll(uniqueRecords)
+	return result
 }
 
 func main() {
-	if len(os.Args) != 3 {
-		fmt.Println("Usage: data_cleaner <input.csv> <output.csv>")
-		os.Exit(1)
-	}
-
-	inputFile := os.Args[1]
-	outputFile := os.Args[2]
-
-	err := removeDuplicates(inputFile, outputFile)
-	if err != nil {
-		fmt.Printf("Error: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("Successfully cleaned data. Output saved to %s\n", outputFile)
+	cleaner := NewDataCleaner()
+	data := []string{"Apple", "apple ", " BANANA", "banana", "Cherry"}
+	
+	fmt.Println("Original data:", data)
+	deduped := cleaner.Deduplicate(data)
+	fmt.Println("Deduplicated:", deduped)
+	
+	testValue := "  APPLE  "
+	fmt.Printf("Is '%s' duplicate? %v\n", testValue, cleaner.IsDuplicate(testValue))
 }
