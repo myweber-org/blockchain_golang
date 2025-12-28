@@ -30,93 +30,32 @@ func GenerateToken(username, role string) (string, error) {
     return token.SignedString(jwtKey)
 }
 
-func ValidateToken(tokenString string) (*Claims, error) {
-    claims := &Claims{}
-    token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-        return jwtKey, nil
-    })
-
-    if err != nil {
-        return nil, err
-    }
-
-    if !token.Valid {
-        return nil, jwt.ErrSignatureInvalid
-    }
-
-    return claims, nil
-}
-
-func AuthMiddleware(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func Authenticate(next http.HandlerFunc) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
         authHeader := r.Header.Get("Authorization")
         if authHeader == "" {
-            http.Error(w, "Authorization header required", http.StatusUnauthorized)
+            http.Error(w, "Authorization header missing", http.StatusUnauthorized)
             return
         }
 
-        tokenParts := strings.Split(authHeader, " ")
-        if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
+        tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+        if tokenString == authHeader {
             http.Error(w, "Invalid authorization format", http.StatusUnauthorized)
             return
         }
 
-        claims, err := ValidateToken(tokenParts[1])
-        if err != nil {
-            http.Error(w, "Invalid token", http.StatusUnauthorized)
+        claims := &Claims{}
+        token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+            return jwtKey, nil
+        })
+
+        if err != nil || !token.Valid {
+            http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
             return
         }
 
         r.Header.Set("X-Username", claims.Username)
         r.Header.Set("X-Role", claims.Role)
         next.ServeHTTP(w, r)
-    })
-}package middleware
-
-import (
-	"net/http"
-	"strings"
-)
-
-type Authenticator struct {
-	secretKey string
-}
-
-func NewAuthenticator(secretKey string) *Authenticator {
-	return &Authenticator{secretKey: secretKey}
-}
-
-func (a *Authenticator) ValidateToken(tokenString string) (bool, error) {
-	if strings.TrimSpace(tokenString) == "" {
-		return false, nil
-	}
-
-	// Simplified token validation logic
-	// In production, use proper JWT library like github.com/golang-jwt/jwt
-	expectedPrefix := "Bearer "
-	if !strings.HasPrefix(tokenString, expectedPrefix) {
-		return false, nil
-	}
-
-	token := strings.TrimPrefix(tokenString, expectedPrefix)
-	return len(token) > 10, nil
-}
-
-func (a *Authenticator) Middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		valid, err := a.ValidateToken(authHeader)
-
-		if err != nil {
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
-
-		if !valid {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
+    }
 }
