@@ -1,51 +1,62 @@
 package middleware
 
 import (
-	"context"
 	"net/http"
 	"strings"
 )
 
-type contextKey string
+type UserAuthenticator struct {
+	secretKey string
+}
 
-const userIDKey contextKey = "userID"
+func NewUserAuthenticator(secretKey string) *UserAuthenticator {
+	return &UserAuthenticator{secretKey: secretKey}
+}
 
-func Authenticate(next http.Handler) http.Handler {
+func (ua *UserAuthenticator) ValidateToken(token string) (string, error) {
+	if token == "" {
+		return "", http.ErrNoCookie
+	}
+	
+	claims, err := parseJWT(token, ua.secretKey)
+	if err != nil {
+		return "", err
+	}
+	
+	return claims.UserID, nil
+}
+
+func (ua *UserAuthenticator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
 			http.Error(w, "Authorization header required", http.StatusUnauthorized)
 			return
 		}
-
+		
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
 			http.Error(w, "Invalid authorization format", http.StatusUnauthorized)
 			return
 		}
-
-		tokenString := parts[1]
-		userID, err := validateToken(tokenString)
+		
+		userID, err := ua.ValidateToken(parts[1])
 		if err != nil {
-			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
 			return
 		}
-
-		ctx := context.WithValue(r.Context(), userIDKey, userID)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		
+		r.Header.Set("X-User-ID", userID)
+		next.ServeHTTP(w, r)
 	})
 }
 
-func GetUserID(ctx context.Context) (string, bool) {
-	userID, ok := ctx.Value(userIDKey).(string)
-	return userID, ok
+func parseJWT(token, secretKey string) (*TokenClaims, error) {
+	// JWT parsing implementation would go here
+	// This is a simplified placeholder
+	return &TokenClaims{UserID: "sample-user-id"}, nil
 }
 
-func validateToken(tokenString string) (string, error) {
-	// In a real implementation, this would parse and verify a JWT
-	// For this example, we'll use a simple mock validation
-	if tokenString == "" {
-		return "", http.ErrNoCookie
-	}
-	return "user-" + tokenString[:8], nil
+type TokenClaims struct {
+	UserID string
 }
