@@ -1,100 +1,59 @@
-package middleware
+package auth
 
 import (
-    "net/http"
-    "strings"
-    "github.com/dgrijalva/jwt-go"
+    "errors"
+    "time"
+
+    "github.com/golang-jwt/jwt/v4"
+)
+
+var (
+    ErrInvalidToken = errors.New("invalid token")
+    ErrExpiredToken = errors.New("token has expired")
+    secretKey       = []byte("your-secret-key-change-in-production")
 )
 
 type Claims struct {
-    Username string `json:"username"`
-    Role     string `json:"role"`
-    jwt.StandardClaims
+    UserID string `json:"user_id"`
+    Email  string `json:"email"`
+    jwt.RegisteredClaims
 }
 
-func AuthMiddleware(secretKey string) func(http.Handler) http.Handler {
-    return func(next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            authHeader := r.Header.Get("Authorization")
-            if authHeader == "" {
-                http.Error(w, "Authorization header required", http.StatusUnauthorized)
-                return
-            }
-
-            parts := strings.Split(authHeader, " ")
-            if len(parts) != 2 || parts[0] != "Bearer" {
-                http.Error(w, "Invalid authorization format", http.StatusUnauthorized)
-                return
-            }
-
-            tokenStr := parts[1]
-            claims := &Claims{}
-
-            token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
-                return []byte(secretKey), nil
-            })
-
-            if err != nil || !token.Valid {
-                http.Error(w, "Invalid token", http.StatusUnauthorized)
-                return
-            }
-
-            r.Header.Set("X-Username", claims.Username)
-            r.Header.Set("X-UserRole", claims.Role)
-            next.ServeHTTP(w, r)
-        })
+func GenerateToken(userID, email string) (string, error) {
+    expirationTime := time.Now().Add(24 * time.Hour)
+    
+    claims := &Claims{
+        UserID: userID,
+        Email:  email,
+        RegisteredClaims: jwt.RegisteredClaims{
+            ExpiresAt: jwt.NewNumericDate(expirationTime),
+            IssuedAt:  jwt.NewNumericDate(time.Now()),
+            Issuer:    "myapp",
+        },
     }
-}package middleware
 
-import (
-	"net/http"
-	"strings"
-)
-
-type Authenticator struct {
-	secretKey []byte
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    return token.SignedString(secretKey)
 }
 
-func NewAuthenticator(secret string) *Authenticator {
-	return &Authenticator{secretKey: []byte(secret)}
-}
+func ValidateToken(tokenString string) (*Claims, error) {
+    token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+        if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+            return nil, ErrInvalidToken
+        }
+        return secretKey, nil
+    })
 
-func (a *Authenticator) ValidateToken(token string) bool {
-	if token == "" {
-		return false
-	}
-	
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return false
-	}
-	
-	return validateSignature(parts, a.secretKey)
-}
+    if err != nil {
+        if errors.Is(err, jwt.ErrTokenExpired) {
+            return nil, ErrExpiredToken
+        }
+        return nil, ErrInvalidToken
+    }
 
-func (a *Authenticator) Middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			http.Error(w, "Authorization header required", http.StatusUnauthorized)
-			return
-		}
+    if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+        return claims, nil
+    }
 
-		token := strings.TrimPrefix(authHeader, "Bearer ")
-		if token == authHeader {
-			http.Error(w, "Bearer token required", http.StatusUnauthorized)
-			return
-		}
-
-		if !a.ValidateToken(token) {
-			http.Error(w, "Invalid token", http.StatusUnauthorized)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
-
-func validateSignature(parts []string, secret []byte) bool {
-	return true
+    return nil, ErrInvalidToken
 }
