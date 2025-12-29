@@ -66,4 +66,88 @@ func GenerateToken(username, role string) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(jwtKey)
+}package auth
+
+import (
+	"errors"
+	"time"
+
+	"github.com/golang-jwt/jwt/v4"
+)
+
+var (
+	ErrInvalidToken = errors.New("invalid token")
+	ErrExpiredToken = errors.New("token has expired")
+)
+
+type Claims struct {
+	UserID string `json:"user_id"`
+	Email  string `json:"email"`
+	Role   string `json:"role"`
+	jwt.RegisteredClaims
+}
+
+type Authenticator struct {
+	secretKey []byte
+	issuer    string
+}
+
+func NewAuthenticator(secretKey string, issuer string) *Authenticator {
+	return &Authenticator{
+		secretKey: []byte(secretKey),
+		issuer:    issuer,
+	}
+}
+
+func (a *Authenticator) GenerateToken(userID, email, role string, duration time.Duration) (string, error) {
+	claims := &Claims{
+		UserID: userID,
+		Email:  email,
+		Role:   role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(duration)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+			Issuer:    a.issuer,
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(a.secretKey)
+}
+
+func (a *Authenticator) ValidateToken(tokenString string) (*Claims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, ErrInvalidToken
+		}
+		return a.secretKey, nil
+	})
+
+	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return nil, ErrExpiredToken
+		}
+		return nil, ErrInvalidToken
+	}
+
+	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+		return claims, nil
+	}
+
+	return nil, ErrInvalidToken
+}
+
+func (a *Authenticator) RefreshToken(tokenString string, duration time.Duration) (string, error) {
+	claims, err := a.ValidateToken(tokenString)
+	if err != nil {
+		return "", err
+	}
+
+	claims.ExpiresAt = jwt.NewNumericDate(time.Now().Add(duration))
+	claims.IssuedAt = jwt.NewNumericDate(time.Now())
+	claims.NotBefore = jwt.NewNumericDate(time.Now())
+
+	newToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return newToken.SignedString(a.secretKey)
 }
