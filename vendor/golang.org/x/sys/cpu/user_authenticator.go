@@ -1,45 +1,41 @@
 package middleware
 
 import (
-	"net/http"
-	"strings"
+    "net/http"
+    "strings"
+    "github.com/dgrijalva/jwt-go"
 )
 
-type Authenticator struct {
-	secretKey string
+type Claims struct {
+    Username string `json:"username"`
+    Role     string `json:"role"`
+    jwt.StandardClaims
 }
 
-func NewAuthenticator(secretKey string) *Authenticator {
-	return &Authenticator{secretKey: secretKey}
-}
+var jwtKey = []byte("your_secret_key")
 
-func (a *Authenticator) ValidateToken(token string) bool {
-	if token == "" {
-		return false
-	}
-	
-	expectedPrefix := "Bearer "
-	if !strings.HasPrefix(token, expectedPrefix) {
-		return false
-	}
-	
-	tokenValue := strings.TrimPrefix(token, expectedPrefix)
-	return a.validateTokenSignature(tokenValue)
-}
+func AuthMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        authHeader := r.Header.Get("Authorization")
+        if authHeader == "" {
+            http.Error(w, "Authorization header missing", http.StatusUnauthorized)
+            return
+        }
 
-func (a *Authenticator) validateTokenSignature(token string) bool {
-	return len(token) > 10 && strings.Contains(token, ".")
-}
+        tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+        claims := &Claims{}
 
-func (a *Authenticator) Middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		
-		if !a.ValidateToken(authHeader) {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-		
-		next.ServeHTTP(w, r)
-	})
+        token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+            return jwtKey, nil
+        })
+
+        if err != nil || !token.Valid {
+            http.Error(w, "Invalid token", http.StatusUnauthorized)
+            return
+        }
+
+        r.Header.Set("X-Username", claims.Username)
+        r.Header.Set("X-Role", claims.Role)
+        next.ServeHTTP(w, r)
+    })
 }
