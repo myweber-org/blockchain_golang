@@ -7,8 +7,8 @@ import (
 )
 
 type Claims struct {
-    UserID string `json:"user_id"`
-    Role   string `json:"role"`
+    Username string `json:"username"`
+    Role     string `json:"role"`
     jwt.RegisteredClaims
 }
 
@@ -35,13 +35,13 @@ func AuthMiddleware(secretKey string) func(http.Handler) http.Handler {
             })
 
             if err != nil || !token.Valid {
-                http.Error(w, "Invalid token", http.StatusUnauthorized)
+                http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
                 return
             }
 
-            r.Header.Set("X-User-ID", claims.UserID)
+            r.Header.Set("X-Username", claims.Username)
             r.Header.Set("X-User-Role", claims.Role)
-            
+
             next.ServeHTTP(w, r)
         })
     }
