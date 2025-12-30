@@ -1,38 +1,90 @@
 
-package data_processor
+package main
 
 import (
-	"regexp"
-	"strings"
-	"unicode"
+    "encoding/csv"
+    "fmt"
+    "io"
+    "os"
+    "strings"
 )
 
-type DataCleaner struct {
-	whitespaceRegex *regexp.Regexp
+func processCSVFile(inputPath, outputPath string) error {
+    inputFile, err := os.Open(inputPath)
+    if err != nil {
+        return fmt.Errorf("failed to open input file: %w", err)
+    }
+    defer inputFile.Close()
+
+    outputFile, err := os.Create(outputPath)
+    if err != nil {
+        return fmt.Errorf("failed to create output file: %w", err)
+    }
+    defer outputFile.Close()
+
+    reader := csv.NewReader(inputFile)
+    writer := csv.NewWriter(outputFile)
+    defer writer.Flush()
+
+    headerProcessed := false
+    for {
+        record, err := reader.Read()
+        if err == io.EOF {
+            break
+        }
+        if err != nil {
+            return fmt.Errorf("error reading CSV record: %w", err)
+        }
+
+        if !headerProcessed {
+            headerProcessed = true
+            if err := writer.Write(record); err != nil {
+                return fmt.Errorf("error writing header: %w", err)
+            }
+            continue
+        }
+
+        cleanedRecord := cleanRecord(record)
+        if isValidRecord(cleanedRecord) {
+            if err := writer.Write(cleanedRecord); err != nil {
+                return fmt.Errorf("error writing record: %w", err)
+            }
+        }
+    }
+
+    return nil
 }
 
-func NewDataCleaner() *DataCleaner {
-	return &DataCleaner{
-		whitespaceRegex: regexp.MustCompile(`\s+`),
-	}
+func cleanRecord(record []string) []string {
+    cleaned := make([]string, len(record))
+    for i, field := range record {
+        cleaned[i] = strings.TrimSpace(field)
+    }
+    return cleaned
 }
 
-func (dc *DataCleaner) NormalizeString(input string) string {
-	trimmed := strings.TrimSpace(input)
-	normalized := dc.whitespaceRegex.ReplaceAllString(trimmed, " ")
-	return normalized
+func isValidRecord(record []string) bool {
+    for _, field := range record {
+        if field == "" {
+            return false
+        }
+    }
+    return true
 }
 
-func (dc *DataCleaner) RemoveSpecialCharacters(input string) string {
-	return strings.Map(func(r rune) rune {
-		if unicode.IsLetter(r) || unicode.IsNumber(r) || unicode.IsSpace(r) {
-			return r
-		}
-		return -1
-	}, input)
-}
+func main() {
+    if len(os.Args) != 3 {
+        fmt.Println("Usage: data_processor <input.csv> <output.csv>")
+        os.Exit(1)
+    }
 
-func (dc *DataCleaner) Process(input string) string {
-	cleaned := dc.RemoveSpecialCharacters(input)
-	return dc.NormalizeString(cleaned)
+    inputPath := os.Args[1]
+    outputPath := os.Args[2]
+
+    if err := processCSVFile(inputPath, outputPath); err != nil {
+        fmt.Printf("Error processing file: %v\n", err)
+        os.Exit(1)
+    }
+
+    fmt.Printf("Successfully processed %s -> %s\n", inputPath, outputPath)
 }
