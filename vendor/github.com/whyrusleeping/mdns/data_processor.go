@@ -89,4 +89,57 @@ func CalculateTotal(records []DataRecord) float64 {
 		total += record.Value
 	}
 	return total
+}package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+type UserData struct {
+	Username string
+	Email    string
+	Age      int
+}
+
+func NormalizeUserData(data UserData) (UserData, error) {
+	if data.Username == "" {
+		return data, fmt.Errorf("username cannot be empty")
+	}
+	if data.Age < 0 || data.Age > 150 {
+		return data, fmt.Errorf("invalid age value")
+	}
+
+	normalized := UserData{
+		Username: strings.TrimSpace(data.Username),
+		Email:    strings.ToLower(strings.TrimSpace(data.Email)),
+		Age:      data.Age,
+	}
+
+	if normalized.Email != "" && !strings.Contains(normalized.Email, "@") {
+		return data, fmt.Errorf("invalid email format")
+	}
+
+	return normalized, nil
+}
+
+func ProcessUserInput(username, email string, age int) {
+	data := UserData{
+		Username: username,
+		Email:    email,
+		Age:      age,
+	}
+
+	normalized, err := NormalizeUserData(data)
+	if err != nil {
+		fmt.Printf("Validation error: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Processed data: %+v\n", normalized)
+}
+
+func main() {
+	ProcessUserInput("  JohnDoe  ", "JOHN@EXAMPLE.COM", 30)
+	ProcessUserInput("", "invalid-email", 200)
 }
