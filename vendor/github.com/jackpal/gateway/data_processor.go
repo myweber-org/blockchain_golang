@@ -52,3 +52,37 @@ func main() {
 
 	fmt.Printf("Processed user: %+v\n", processed)
 }
+package main
+
+import (
+	"errors"
+	"strings"
+	"unicode"
+)
+
+func ValidateUsername(username string) error {
+	if len(username) < 3 || len(username) > 20 {
+		return errors.New("username must be between 3 and 20 characters")
+	}
+
+	for _, r := range username {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '-' {
+			return errors.New("username can only contain letters, digits, underscores, and hyphens")
+		}
+	}
+
+	return nil
+}
+
+func NormalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+func TransformUserData(username, email string) (string, string, error) {
+	if err := ValidateUsername(username); err != nil {
+		return "", "", err
+	}
+
+	normalizedEmail := NormalizeEmail(email)
+	return username, normalizedEmail, nil
+}
