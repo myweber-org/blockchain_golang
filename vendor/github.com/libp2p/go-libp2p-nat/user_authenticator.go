@@ -1,4 +1,4 @@
-package auth
+package middleware
 
 import (
     "net/http"
@@ -14,25 +14,9 @@ type Claims struct {
     jwt.RegisteredClaims
 }
 
-var jwtKey = []byte("your-secret-key-here")
+var jwtKey = []byte("your_secret_key_here")
 
-func GenerateToken(username, role string) (string, error) {
-    expirationTime := time.Now().Add(24 * time.Hour)
-    claims := &Claims{
-        Username: username,
-        Role:     role,
-        RegisteredClaims: jwt.RegisteredClaims{
-            ExpiresAt: jwt.NewNumericDate(expirationTime),
-            IssuedAt:  jwt.NewNumericDate(time.Now()),
-            Issuer:    "myapp",
-        },
-    }
-
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-    return token.SignedString(jwtKey)
-}
-
-func Authenticate(next http.Handler) http.Handler {
+func AuthMiddleware(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         authHeader := r.Header.Get("Authorization")
         if authHeader == "" {
@@ -52,7 +36,7 @@ func Authenticate(next http.Handler) http.Handler {
             return
         }
 
-        if time.Until(claims.ExpiresAt.Time) < 0 {
+        if time.Now().Unix() > claims.ExpiresAt.Unix() {
             http.Error(w, "Token expired", http.StatusUnauthorized)
             return
         }
@@ -64,15 +48,18 @@ func Authenticate(next http.Handler) http.Handler {
     })
 }
 
-func Authorize(requiredRole string) func(http.Handler) http.Handler {
-    return func(next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            userRole := r.Header.Get("X-Role")
-            if userRole != requiredRole {
-                http.Error(w, "Insufficient permissions", http.StatusForbidden)
-                return
-            }
-            next.ServeHTTP(w, r)
-        })
+func GenerateToken(username, role string) (string, error) {
+    expirationTime := time.Now().Add(24 * time.Hour)
+    claims := &Claims{
+        Username: username,
+        Role:     role,
+        RegisteredClaims: jwt.RegisteredClaims{
+            ExpiresAt: jwt.NewNumericDate(expirationTime),
+            IssuedAt:  jwt.NewNumericDate(time.Now()),
+            Issuer:    "auth_service",
+        },
     }
+
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    return token.SignedString(jwtKey)
 }
