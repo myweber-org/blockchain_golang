@@ -2,126 +2,114 @@
 package main
 
 import (
-	"encoding/csv"
-	"fmt"
-	"io"
-	"os"
-	"strings"
+    "encoding/csv"
+    "fmt"
+    "io"
+    "os"
+    "strconv"
 )
 
-type DataProcessor struct {
-	FilePath string
-	Headers  []string
-	Records  [][]string
+type Record struct {
+    ID    int
+    Name  string
+    Value float64
 }
 
-func NewDataProcessor(filePath string) *DataProcessor {
-	return &DataProcessor{
-		FilePath: filePath,
-	}
+func processCSVFile(filename string) ([]Record, error) {
+    file, err := os.Open(filename)
+    if err != nil {
+        return nil, fmt.Errorf("failed to open file: %w", err)
+    }
+    defer file.Close()
+
+    reader := csv.NewReader(file)
+    reader.TrimLeadingSpace = true
+
+    var records []Record
+    lineNumber := 0
+
+    for {
+        lineNumber++
+        row, err := reader.Read()
+        if err == io.EOF {
+            break
+        }
+        if err != nil {
+            return nil, fmt.Errorf("csv read error at line %d: %w", lineNumber, err)
+        }
+
+        if len(row) != 3 {
+            return nil, fmt.Errorf("invalid column count at line %d: expected 3, got %d", lineNumber, len(row))
+        }
+
+        id, err := strconv.Atoi(row[0])
+        if err != nil {
+            return nil, fmt.Errorf("invalid ID at line %d: %w", lineNumber, err)
+        }
+
+        name := row[1]
+        if name == "" {
+            return nil, fmt.Errorf("empty name at line %d", lineNumber)
+        }
+
+        value, err := strconv.ParseFloat(row[2], 64)
+        if err != nil {
+            return nil, fmt.Errorf("invalid value at line %d: %w", lineNumber, err)
+        }
+
+        records = append(records, Record{
+            ID:    id,
+            Name:  name,
+            Value: value,
+        })
+    }
+
+    if len(records) == 0 {
+        return nil, fmt.Errorf("no valid records found in file")
+    }
+
+    return records, nil
 }
 
-func (dp *DataProcessor) LoadAndValidate() error {
-	file, err := os.Open(dp.FilePath)
-	if err != nil {
-		return fmt.Errorf("failed to open file: %w", err)
-	}
-	defer file.Close()
+func calculateStatistics(records []Record) (float64, float64, float64) {
+    if len(records) == 0 {
+        return 0, 0, 0
+    }
 
-	reader := csv.NewReader(file)
-	headers, err := reader.Read()
-	if err != nil {
-		return fmt.Errorf("failed to read headers: %w", err)
-	}
-	dp.Headers = headers
+    var sum, min, max float64
+    min = records[0].Value
+    max = records[0].Value
 
-	dp.Records = make([][]string, 0)
-	lineNum := 2
-	for {
-		record, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("error reading line %d: %w", lineNum, err)
-		}
+    for _, record := range records {
+        sum += record.Value
+        if record.Value < min {
+            min = record.Value
+        }
+        if record.Value > max {
+            max = record.Value
+        }
+    }
 
-		if len(record) != len(headers) {
-			return fmt.Errorf("column count mismatch on line %d", lineNum)
-		}
-
-		for i, value := range record {
-			record[i] = strings.TrimSpace(value)
-			if record[i] == "" {
-				return fmt.Errorf("empty value in column '%s' line %d", headers[i], lineNum)
-			}
-		}
-
-		dp.Records = append(dp.Records, record)
-		lineNum++
-	}
-
-	if len(dp.Records) == 0 {
-		return fmt.Errorf("no data records found")
-	}
-
-	return nil
-}
-
-func (dp *DataProcessor) GetColumnStats(columnIndex int) (min, max string, err error) {
-	if columnIndex < 0 || columnIndex >= len(dp.Headers) {
-		return "", "", fmt.Errorf("invalid column index")
-	}
-
-	if len(dp.Records) == 0 {
-		return "", "", fmt.Errorf("no records available")
-	}
-
-	minVal := dp.Records[0][columnIndex]
-	maxVal := dp.Records[0][columnIndex]
-
-	for _, record := range dp.Records[1:] {
-		val := record[columnIndex]
-		if val < minVal {
-			minVal = val
-		}
-		if val > maxVal {
-			maxVal = val
-		}
-	}
-
-	return minVal, maxVal, nil
-}
-
-func (dp *DataProcessor) FilterRecords(filterFunc func([]string) bool) [][]string {
-	filtered := make([][]string, 0)
-	for _, record := range dp.Records {
-		if filterFunc(record) {
-			filtered = append(filtered, record)
-		}
-	}
-	return filtered
+    average := sum / float64(len(records))
+    return average, min, max
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: data_processor <csv_file>")
-		os.Exit(1)
-	}
+    if len(os.Args) < 2 {
+        fmt.Println("Usage: data_processor <csv_file>")
+        os.Exit(1)
+    }
 
-	processor := NewDataProcessor(os.Args[1])
-	if err := processor.LoadAndValidate(); err != nil {
-		fmt.Printf("Error: %v\n", err)
-		os.Exit(1)
-	}
+    filename := os.Args[1]
+    records, err := processCSVFile(filename)
+    if err != nil {
+        fmt.Printf("Error processing file: %v\n", err)
+        os.Exit(1)
+    }
 
-	fmt.Printf("Successfully loaded %d records with %d columns\n", 
-		len(processor.Records), len(processor.Headers))
-
-	for i, header := range processor.Headers {
-		min, max, err := processor.GetColumnStats(i)
-		if err == nil {
-			fmt.Printf("Column '%s': min='%s', max='%s'\n", header, min, max)
-		}
-	}
+    avg, min, max := calculateStatistics(records)
+    fmt.Printf("Processed %d records\n", len(records))
+    fmt.Printf("Average value: %.2f\n", avg)
+    fmt.Printf("Minimum value: %.2f\n", min)
+    fmt.Printf("Maximum value: %.2f\n", max)
 }
