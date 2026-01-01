@@ -81,3 +81,84 @@ func main() {
 
 	fmt.Printf("Successfully processed %s -> %s\n", inputFile, outputFile)
 }
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"regexp"
+	"strings"
+)
+
+type UserData struct {
+	Email     string `json:"email"`
+	Username  string `json:"username"`
+	Age       int    `json:"age"`
+	IPAddress string `json:"ip_address"`
+}
+
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+func validateEmail(email string) bool {
+	emailRegex := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
+	matched, _ := regexp.MatchString(emailRegex, email)
+	return matched
+}
+
+func sanitizeUsername(username string) string {
+	reg := regexp.MustCompile(`[^a-zA-Z0-9_-]`)
+	return reg.ReplaceAllString(username, "")
+}
+
+func validateIP(ip string) bool {
+	ipRegex := `^(\d{1,3}\.){3}\d{1,3}$`
+	matched, _ := regexp.MatchString(ipRegex, ip)
+	return matched
+}
+
+func processUserData(rawData []byte) (*UserData, error) {
+	var data UserData
+	err := json.Unmarshal(rawData, &data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON: %v", err)
+	}
+
+	data.Email = normalizeEmail(data.Email)
+	if !validateEmail(data.Email) {
+		return nil, fmt.Errorf("invalid email format: %s", data.Email)
+	}
+
+	data.Username = sanitizeUsername(data.Username)
+	if len(data.Username) < 3 {
+		return nil, fmt.Errorf("username too short")
+	}
+
+	if data.Age < 0 || data.Age > 150 {
+		return nil, fmt.Errorf("invalid age value: %d", data.Age)
+	}
+
+	if !validateIP(data.IPAddress) {
+		return nil, fmt.Errorf("invalid IP address format: %s", data.IPAddress)
+	}
+
+	return &data, nil
+}
+
+func main() {
+	jsonData := []byte(`{
+		"email": "  TEST@Example.COM  ",
+		"username": "user_123!@#",
+		"age": 25,
+		"ip_address": "192.168.1.1"
+	}`)
+
+	processedData, err := processUserData(jsonData)
+	if err != nil {
+		fmt.Printf("Error processing data: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Processed data: %+v\n", processedData)
+}
