@@ -1,4 +1,4 @@
-package auth
+package middleware
 
 import (
     "net/http"
@@ -14,33 +14,19 @@ type Claims struct {
     jwt.RegisteredClaims
 }
 
-var jwtKey = []byte("your_secret_key_here")
+var jwtKey = []byte("your-secret-key")
 
-func GenerateToken(username, role string) (string, error) {
-    expirationTime := time.Now().Add(24 * time.Hour)
-    claims := &Claims{
-        Username: username,
-        Role:     role,
-        RegisteredClaims: jwt.RegisteredClaims{
-            ExpiresAt: jwt.NewNumericDate(expirationTime),
-        },
-    }
-
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-    return token.SignedString(jwtKey)
-}
-
-func Authenticate(next http.HandlerFunc) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
+func AuthMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         authHeader := r.Header.Get("Authorization")
         if authHeader == "" {
-            http.Error(w, "Authorization header missing", http.StatusUnauthorized)
+            http.Error(w, "Authorization header required", http.StatusUnauthorized)
             return
         }
 
         tokenString := strings.TrimPrefix(authHeader, "Bearer ")
         if tokenString == authHeader {
-            http.Error(w, "Invalid authorization format", http.StatusUnauthorized)
+            http.Error(w, "Bearer token required", http.StatusUnauthorized)
             return
         }
 
@@ -50,12 +36,17 @@ func Authenticate(next http.HandlerFunc) http.HandlerFunc {
         })
 
         if err != nil || !token.Valid {
-            http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+            http.Error(w, "Invalid token", http.StatusUnauthorized)
+            return
+        }
+
+        if time.Until(claims.ExpiresAt.Time) < 30*time.Second {
+            http.Error(w, "Token expiring soon", http.StatusUnauthorized)
             return
         }
 
         r.Header.Set("X-Username", claims.Username)
-        r.Header.Set("X-Role", claims.Role)
+        r.Header.Set("X-User-Role", claims.Role)
         next.ServeHTTP(w, r)
-    }
+    })
 }
