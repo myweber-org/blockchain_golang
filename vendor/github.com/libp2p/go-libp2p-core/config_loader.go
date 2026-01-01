@@ -1,55 +1,91 @@
 package config
 
 import (
-    "fmt"
-    "io/ioutil"
-    "gopkg.in/yaml.v2"
+	"errors"
+	"io/ioutil"
+	"os"
+	"path/filepath"
+
+	"gopkg.in/yaml.v2"
 )
 
-type DatabaseConfig struct {
-    Host     string `yaml:"host"`
-    Port     int    `yaml:"port"`
-    Username string `yaml:"username"`
-    Password string `yaml:"password"`
-    Name     string `yaml:"name"`
+type Config struct {
+	Server struct {
+		Host string `yaml:"host"`
+		Port int    `yaml:"port"`
+	} `yaml:"server"`
+	Database struct {
+		Host     string `yaml:"host"`
+		Username string `yaml:"username"`
+		Password string `yaml:"password"`
+		Name     string `yaml:"name"`
+	} `yaml:"database"`
+	LogLevel string `yaml:"log_level"`
 }
 
-type ServerConfig struct {
-    Port int    `yaml:"port"`
-    Mode string `yaml:"mode"`
+func LoadConfig(configPath string) (*Config, error) {
+	if configPath == "" {
+		return nil, errors.New("config path cannot be empty")
+	}
+
+	fullPath, err := filepath.Abs(configPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		return nil, errors.New("config file does not exist")
+	}
+
+	data, err := ioutil.ReadFile(fullPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var config Config
+	err = yaml.Unmarshal(data, &config)
+	if err != nil {
+		return nil, err
+	}
+
+	if config.Server.Host == "" {
+		config.Server.Host = "localhost"
+	}
+
+	if config.Server.Port == 0 {
+		config.Server.Port = 8080
+	}
+
+	if config.LogLevel == "" {
+		config.LogLevel = "info"
+	}
+
+	return &config, nil
 }
 
-type AppConfig struct {
-    Server   ServerConfig   `yaml:"server"`
-    Database DatabaseConfig `yaml:"database"`
-}
+func (c *Config) Validate() error {
+	if c.Server.Port < 1 || c.Server.Port > 65535 {
+		return errors.New("server port must be between 1 and 65535")
+	}
 
-func LoadConfig(filePath string) (*AppConfig, error) {
-    data, err := ioutil.ReadFile(filePath)
-    if err != nil {
-        return nil, fmt.Errorf("failed to read config file: %w", err)
-    }
+	if c.Database.Host == "" {
+		return errors.New("database host is required")
+	}
 
-    var config AppConfig
-    if err := yaml.Unmarshal(data, &config); err != nil {
-        return nil, fmt.Errorf("failed to parse YAML config: %w", err)
-    }
+	if c.Database.Name == "" {
+		return errors.New("database name is required")
+	}
 
-    return &config, nil
-}
+	validLogLevels := map[string]bool{
+		"debug": true,
+		"info":  true,
+		"warn":  true,
+		"error": true,
+	}
 
-func ValidateConfig(config *AppConfig) error {
-    if config.Server.Port <= 0 || config.Server.Port > 65535 {
-        return fmt.Errorf("invalid server port: %d", config.Server.Port)
-    }
+	if !validLogLevels[c.LogLevel] {
+		return errors.New("invalid log level")
+	}
 
-    if config.Database.Host == "" {
-        return fmt.Errorf("database host cannot be empty")
-    }
-
-    if config.Database.Port <= 0 || config.Database.Port > 65535 {
-        return fmt.Errorf("invalid database port: %d", config.Database.Port)
-    }
-
-    return nil
+	return nil
 }
