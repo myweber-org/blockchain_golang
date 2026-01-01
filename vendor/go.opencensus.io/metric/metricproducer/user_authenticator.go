@@ -14,7 +14,7 @@ type Claims struct {
     jwt.RegisteredClaims
 }
 
-var jwtKey = []byte("your-secret-key-here")
+var jwtKey = []byte("your_secret_key_here")
 
 func GenerateToken(username, role string) (string, error) {
     expirationTime := time.Now().Add(24 * time.Hour)
@@ -23,8 +23,6 @@ func GenerateToken(username, role string) (string, error) {
         Role:     role,
         RegisteredClaims: jwt.RegisteredClaims{
             ExpiresAt: jwt.NewNumericDate(expirationTime),
-            IssuedAt:  jwt.NewNumericDate(time.Now()),
-            Issuer:    "myapp",
         },
     }
 
@@ -32,8 +30,8 @@ func GenerateToken(username, role string) (string, error) {
     return token.SignedString(jwtKey)
 }
 
-func Authenticate(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func Authenticate(next http.HandlerFunc) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
         authHeader := r.Header.Get("Authorization")
         if authHeader == "" {
             http.Error(w, "Authorization header required", http.StatusUnauthorized)
@@ -60,5 +58,5 @@ func Authenticate(next http.Handler) http.Handler {
         r.Header.Set("X-Username", claims.Username)
         r.Header.Set("X-Role", claims.Role)
         next.ServeHTTP(w, r)
-    })
+    }
 }
