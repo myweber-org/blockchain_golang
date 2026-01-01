@@ -1,67 +1,52 @@
 package middleware
 
 import (
-	"context"
-	"net/http"
-	"strings"
+    "net/http"
+    "strings"
+    "time"
+
+    "github.com/golang-jwt/jwt/v5"
 )
 
-type contextKey string
-
-const userIDKey contextKey = "userID"
-
-type TokenValidator interface {
-	ValidateToken(tokenString string) (string, error)
+type Claims struct {
+    Username string `json:"username"`
+    Role     string `json:"role"`
+    jwt.RegisteredClaims
 }
 
-type AuthMiddleware struct {
-	tokenValidator TokenValidator
-	excludedPaths  map[string]bool
-}
+var jwtKey = []byte("your-secret-key-here")
 
-func NewAuthMiddleware(validator TokenValidator, excludedPaths []string) *AuthMiddleware {
-	excludedMap := make(map[string]bool)
-	for _, path := range excludedPaths {
-		excludedMap[path] = true
-	}
-	return &AuthMiddleware{
-		tokenValidator: validator,
-		excludedPaths:  excludedMap,
-	}
-}
+func AuthMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        authHeader := r.Header.Get("Authorization")
+        if authHeader == "" {
+            http.Error(w, "Authorization header required", http.StatusUnauthorized)
+            return
+        }
 
-func (m *AuthMiddleware) Middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if m.excludedPaths[r.URL.Path] {
-			next.ServeHTTP(w, r)
-			return
-		}
+        tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+        if tokenString == authHeader {
+            http.Error(w, "Bearer token required", http.StatusUnauthorized)
+            return
+        }
 
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			http.Error(w, "Authorization header required", http.StatusUnauthorized)
-			return
-		}
+        claims := &Claims{}
+        token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+            return jwtKey, nil
+        })
 
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			http.Error(w, "Invalid authorization format", http.StatusUnauthorized)
-			return
-		}
+        if err != nil || !token.Valid {
+            http.Error(w, "Invalid token", http.StatusUnauthorized)
+            return
+        }
 
-		tokenString := parts[1]
-		userID, err := m.tokenValidator.ValidateToken(tokenString)
-		if err != nil {
-			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
-			return
-		}
+        if time.Until(claims.ExpiresAt.Time) < 30*time.Second {
+            http.Error(w, "Token expiring soon", http.StatusUnauthorized)
+            return
+        }
 
-		ctx := context.WithValue(r.Context(), userIDKey, userID)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
-func GetUserIDFromContext(ctx context.Context) (string, bool) {
-	userID, ok := ctx.Value(userIDKey).(string)
-	return userID, ok
+        r.Header.Set("X-Username", claims.Username)
+        r.Header.Set("X-User-Role", claims.Role)
+        next.ServeHTTP(w, r)
+    })
 }
