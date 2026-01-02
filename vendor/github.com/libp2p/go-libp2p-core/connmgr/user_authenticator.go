@@ -10,10 +10,10 @@ import (
 
 type contextKey string
 
-const UserIDKey contextKey = "userID"
+const userIDKey contextKey = "userID"
 
 type Claims struct {
-	UserID string `json:"userID"`
+	UserID string `json:"user_id"`
 	jwt.RegisteredClaims
 }
 
@@ -44,8 +44,13 @@ func AuthMiddleware(secretKey string) func(http.Handler) http.Handler {
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
+			ctx := context.WithValue(r.Context(), userIDKey, claims.UserID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+func GetUserID(ctx context.Context) (string, bool) {
+	userID, ok := ctx.Value(userIDKey).(string)
+	return userID, ok
 }
