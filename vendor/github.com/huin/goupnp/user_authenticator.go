@@ -134,4 +134,73 @@ func AuthMiddleware(next http.Handler) http.Handler {
         ctx := context.WithValue(r.Context(), "user_claims", claims)
         next.ServeHTTP(w, r.WithContext(ctx))
     })
+}package main
+
+import (
+	"fmt"
+	"time"
+	"github.com/golang-jwt/jwt/v5"
+)
+
+type UserClaims struct {
+	Username string `json:"username"`
+	UserID   int    `json:"user_id"`
+	Role     string `json:"role"`
+	jwt.RegisteredClaims
+}
+
+var secretKey = []byte("your-secret-key-change-in-production")
+
+func GenerateToken(username string, userID int, role string) (string, error) {
+	claims := UserClaims{
+		Username: username,
+		UserID:   userID,
+		Role:     role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Issuer:    "auth-service",
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(secretKey)
+}
+
+func ValidateToken(tokenString string) (*UserClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &UserClaims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return secretKey, nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	if claims, ok := token.Claims.(*UserClaims); ok && token.Valid {
+		return claims, nil
+	}
+
+	return nil, fmt.Errorf("invalid token")
+}
+
+func main() {
+	token, err := GenerateToken("john_doe", 123, "admin")
+	if err != nil {
+		fmt.Printf("Error generating token: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Generated token: %s\n", token)
+
+	claims, err := ValidateToken(token)
+	if err != nil {
+		fmt.Printf("Error validating token: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Token validated successfully. User: %s, ID: %d, Role: %s\n",
+		claims.Username, claims.UserID, claims.Role)
 }
