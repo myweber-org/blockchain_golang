@@ -1,158 +1,146 @@
-
 package main
 
 import (
-	"compress/gzip"
-	"fmt"
-	"io"
-	"os"
-	"path/filepath"
-	"sync"
-	"time"
+    "compress/gzip"
+    "fmt"
+    "io"
+    "os"
+    "path/filepath"
+    "sync"
+    "time"
 )
 
 type RotatingLogger struct {
-	mu          sync.Mutex
-	currentFile *os.File
-	basePath    string
-	maxSize     int64
-	fileSize    int64
-	fileCount   int
-	maxFiles    int
+    mu          sync.Mutex
+    basePath    string
+    maxSize     int64
+    currentSize int64
+    currentFile *os.File
+    sequence    int
 }
 
-func NewRotatingLogger(basePath string, maxSize int64, maxFiles int) (*RotatingLogger, error) {
-	rl := &RotatingLogger{
-		basePath: basePath,
-		maxSize:  maxSize,
-		maxFiles: maxFiles,
-	}
+func NewRotatingLogger(basePath string, maxSizeMB int) (*RotatingLogger, error) {
+    maxSize := int64(maxSizeMB) * 1024 * 1024
+    logger := &RotatingLogger{
+        basePath: basePath,
+        maxSize:  maxSize,
+        sequence: 0,
+    }
 
-	if err := rl.openCurrentFile(); err != nil {
-		return nil, err
-	}
-
-	return rl, nil
+    if err := logger.openCurrentFile(); err != nil {
+        return nil, err
+    }
+    return logger, nil
 }
 
-func (rl *RotatingLogger) openCurrentFile() error {
-	dir := filepath.Dir(rl.basePath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
+func (l *RotatingLogger) openCurrentFile() error {
+    filename := fmt.Sprintf("%s.log", l.basePath)
+    file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+    if err != nil {
+        return err
+    }
 
-	f, err := os.OpenFile(rl.basePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
-	if err != nil {
-		return err
-	}
+    info, err := file.Stat()
+    if err != nil {
+        file.Close()
+        return err
+    }
 
-	info, err := f.Stat()
-	if err != nil {
-		f.Close()
-		return err
-	}
-
-	rl.currentFile = f
-	rl.fileSize = info.Size()
-	return nil
+    l.currentFile = file
+    l.currentSize = info.Size()
+    return nil
 }
 
-func (rl *RotatingLogger) Write(p []byte) (int, error) {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
+func (l *RotatingLogger) Write(p []byte) (int, error) {
+    l.mu.Lock()
+    defer l.mu.Unlock()
 
-	if rl.fileSize+int64(len(p)) > rl.maxSize {
-		if err := rl.rotate(); err != nil {
-			return 0, err
-		}
-	}
+    if l.currentSize+int64(len(p)) > l.maxSize {
+        if err := l.rotate(); err != nil {
+            return 0, err
+        }
+    }
 
-	n, err := rl.currentFile.Write(p)
-	if err == nil {
-		rl.fileSize += int64(n)
-	}
-	return n, err
+    n, err := l.currentFile.Write(p)
+    if err == nil {
+        l.currentSize += int64(n)
+    }
+    return n, err
 }
 
-func (rl *RotatingLogger) rotate() error {
-	if rl.currentFile != nil {
-		rl.currentFile.Close()
-	}
+func (l *RotatingLogger) rotate() error {
+    if l.currentFile != nil {
+        l.currentFile.Close()
+    }
 
-	timestamp := time.Now().Format("20060102_150405")
-	archivePath := fmt.Sprintf("%s.%s.gz", rl.basePath, timestamp)
+    timestamp := time.Now().Format("20060102_150405")
+    rotatedName := fmt.Sprintf("%s_%s_%03d.log", l.basePath, timestamp, l.sequence)
+    l.sequence++
 
-	if err := rl.compressFile(rl.basePath, archivePath); err != nil {
-		return err
-	}
+    if err := os.Rename(fmt.Sprintf("%s.log", l.basePath), rotatedName); err != nil {
+        return err
+    }
 
-	if err := os.Remove(rl.basePath); err != nil && !os.IsNotExist(err) {
-		return err
-	}
+    if err := l.compressFile(rotatedName); err != nil {
+        return err
+    }
 
-	rl.fileCount++
-	if rl.fileCount > rl.maxFiles {
-		rl.cleanOldFiles()
-	}
-
-	return rl.openCurrentFile()
+    return l.openCurrentFile()
 }
 
-func (rl *RotatingLogger) compressFile(src, dst string) error {
-	source, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer source.Close()
+func (l *RotatingLogger) compressFile(source string) error {
+    srcFile, err := os.Open(source)
+    if err != nil {
+        return err
+    }
+    defer srcFile.Close()
 
-	dest, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer dest.Close()
+    destFile, err := os.Create(source + ".gz")
+    if err != nil {
+        return err
+    }
+    defer destFile.Close()
 
-	gz := gzip.NewWriter(dest)
-	defer gz.Close()
+    gzWriter := gzip.NewWriter(destFile)
+    defer gzWriter.Close()
 
-	_, err = io.Copy(gz, source)
-	return err
+    if _, err := io.Copy(gzWriter, srcFile); err != nil {
+        return err
+    }
+
+    if err := os.Remove(source); err != nil {
+        return err
+    }
+
+    return nil
 }
 
-func (rl *RotatingLogger) cleanOldFiles() {
-	pattern := rl.basePath + ".*.gz"
-	matches, err := filepath.Glob(pattern)
-	if err != nil {
-		return
-	}
+func (l *RotatingLogger) Close() error {
+    l.mu.Lock()
+    defer l.mu.Unlock()
 
-	if len(matches) > rl.maxFiles {
-		filesToDelete := len(matches) - rl.maxFiles
-		for i := 0; i < filesToDelete; i++ {
-			os.Remove(matches[i])
-		}
-	}
-}
-
-func (rl *RotatingLogger) Close() error {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-
-	if rl.currentFile != nil {
-		return rl.currentFile.Close()
-	}
-	return nil
+    if l.currentFile != nil {
+        return l.currentFile.Close()
+    }
+    return nil
 }
 
 func main() {
-	logger, err := NewRotatingLogger("/var/log/myapp/app.log", 1024*1024, 10)
-	if err != nil {
-		panic(err)
-	}
-	defer logger.Close()
+    logger, err := NewRotatingLogger("application", 10)
+    if err != nil {
+        fmt.Printf("Failed to create logger: %v\n", err)
+        return
+    }
+    defer logger.Close()
 
-	for i := 0; i < 100; i++ {
-		message := fmt.Sprintf("Log entry %d: Application is running normally\n", i)
-		logger.Write([]byte(message))
-		time.Sleep(10 * time.Millisecond)
-	}
+    for i := 0; i < 1000; i++ {
+        message := fmt.Sprintf("Log entry %d at %s\n", i, time.Now().Format(time.RFC3339))
+        if _, err := logger.Write([]byte(message)); err != nil {
+            fmt.Printf("Write error: %v\n", err)
+            break
+        }
+        time.Sleep(10 * time.Millisecond)
+    }
+
+    fmt.Println("Log rotation test completed")
 }
