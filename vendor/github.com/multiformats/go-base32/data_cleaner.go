@@ -1,63 +1,67 @@
-
 package main
 
 import (
-	"fmt"
-	"strings"
+    "encoding/csv"
+    "fmt"
+    "io"
+    "os"
+    "strings"
 )
 
-type DataCleaner struct {
-	processedRecords map[string]bool
-}
+func cleanCSV(inputPath, outputPath string) error {
+    inFile, err := os.Open(inputPath)
+    if err != nil {
+        return fmt.Errorf("failed to open input file: %w", err)
+    }
+    defer inFile.Close()
 
-func NewDataCleaner() *DataCleaner {
-	return &DataCleaner{
-		processedRecords: make(map[string]bool),
-	}
-}
+    outFile, err := os.Create(outputPath)
+    if err != nil {
+        return fmt.Errorf("failed to create output file: %w", err)
+    }
+    defer outFile.Close()
 
-func (dc *DataCleaner) RemoveDuplicates(records []string) []string {
-	var unique []string
-	for _, record := range records {
-		normalized := strings.ToLower(strings.TrimSpace(record))
-		if !dc.processedRecords[normalized] {
-			dc.processedRecords[normalized] = true
-			unique = append(unique, record)
-		}
-	}
-	return unique
-}
+    reader := csv.NewReader(inFile)
+    writer := csv.NewWriter(outFile)
+    defer writer.Flush()
 
-func (dc *DataCleaner) ValidateEmail(email string) bool {
-	if len(email) < 3 || !strings.Contains(email, "@") {
-		return false
-	}
-	parts := strings.Split(email, "@")
-	if len(parts) != 2 || len(parts[0]) == 0 || len(parts[1]) == 0 {
-		return false
-	}
-	return strings.Contains(parts[1], ".")
-}
+    seen := make(map[string]bool)
+    for {
+        record, err := reader.Read()
+        if err == io.EOF {
+            break
+        }
+        if err != nil {
+            return fmt.Errorf("error reading CSV: %w", err)
+        }
 
-func (dc *DataCleaner) SanitizeInput(input string) string {
-	trimmed := strings.TrimSpace(input)
-	replacer := strings.NewReplacer("\n", " ", "\t", " ", "\r", " ")
-	return replacer.Replace(trimmed)
+        for i, field := range record {
+            record[i] = strings.TrimSpace(field)
+        }
+
+        key := strings.Join(record, "|")
+        if seen[key] {
+            continue
+        }
+        seen[key] = true
+
+        if err := writer.Write(record); err != nil {
+            return fmt.Errorf("error writing CSV: %w", err)
+        }
+    }
+    return nil
 }
 
 func main() {
-	cleaner := NewDataCleaner()
-	
-	records := []string{"user@example.com", " test@domain.org ", "USER@EXAMPLE.COM", "invalid-email"}
-	
-	fmt.Println("Original records:", records)
-	
-	deduped := cleaner.RemoveDuplicates(records)
-	fmt.Println("After deduplication:", deduped)
-	
-	for _, record := range deduped {
-		sanitized := cleaner.SanitizeInput(record)
-		isValid := cleaner.ValidateEmail(sanitized)
-		fmt.Printf("Email: %s, Valid: %v\n", sanitized, isValid)
-	}
+    if len(os.Args) != 3 {
+        fmt.Println("Usage: data_cleaner <input.csv> <output.csv>")
+        os.Exit(1)
+    }
+
+    err := cleanCSV(os.Args[1], os.Args[2])
+    if err != nil {
+        fmt.Printf("Error: %v\n", err)
+        os.Exit(1)
+    }
+    fmt.Println("Data cleaning completed successfully")
 }
