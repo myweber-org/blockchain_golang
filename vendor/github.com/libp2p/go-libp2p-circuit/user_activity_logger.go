@@ -2,57 +2,109 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
-	"os"
+	"net/http"
+	"sync"
 	"time"
 )
 
 type Activity struct {
+	Timestamp time.Time `json:"timestamp"`
 	UserID    string    `json:"user_id"`
 	Action    string    `json:"action"`
-	Timestamp time.Time `json:"timestamp"`
-	Details   string    `json:"details,omitempty"`
+	Endpoint  string    `json:"endpoint"`
+	IPAddress string    `json:"ip_address"`
 }
 
-func logActivity(userID, action, details string) error {
+type ActivityLogger struct {
+	mu       sync.RWMutex
+	activities []Activity
+	rateLimit map[string]time.Time
+}
+
+func NewActivityLogger() *ActivityLogger {
+	return &ActivityLogger{
+		activities: make([]Activity, 0),
+		rateLimit:  make(map[string]time.Time),
+	}
+}
+
+func (al *ActivityLogger) LogActivity(userID, action, endpoint, ip string) bool {
+	al.mu.Lock()
+	defer al.mu.Unlock()
+
+	key := ip + ":" + endpoint
+	if lastTime, exists := al.rateLimit[key]; exists {
+		if time.Since(lastTime) < time.Second {
+			return false
+		}
+	}
+
 	activity := Activity{
+		Timestamp: time.Now().UTC(),
 		UserID:    userID,
 		Action:    action,
-		Timestamp: time.Now().UTC(),
-		Details:   details,
+		Endpoint:  endpoint,
+		IPAddress: ip,
 	}
 
-	file, err := os.OpenFile("activity.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open log file: %w", err)
-	}
-	defer file.Close()
+	al.activities = append(al.activities, activity)
+	al.rateLimit[key] = activity.Timestamp
+	return true
+}
 
-	encoder := json.NewEncoder(file)
-	if err := encoder.Encode(activity); err != nil {
-		return fmt.Errorf("failed to encode activity: %w", err)
-	}
+func (al *ActivityLogger) GetActivities() []Activity {
+	al.mu.RLock()
+	defer al.mu.RUnlock()
+	return al.activities
+}
 
-	return nil
+func loggingMiddleware(al *ActivityLogger, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := r.Header.Get("X-User-ID")
+		if userID == "" {
+			userID = "anonymous"
+		}
+
+		ip := r.RemoteAddr
+		if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+			ip = forwarded
+		}
+
+		action := "ACCESS"
+		if r.Method != "GET" {
+			action = "MODIFY"
+		}
+
+		logged := al.LogActivity(userID, action, r.URL.Path, ip)
+		if !logged {
+			http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	}
+}
+
+func activityHandler(al *ActivityLogger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		activities := al.GetActivities()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(activities)
+	}
 }
 
 func main() {
-	activities := []struct {
-		userID string
-		action string
-		details string
-	}{
-		{"user_001", "login", "successful authentication"},
-		{"user_002", "purchase", "item_id: 456, amount: 29.99"},
-		{"user_001", "logout", "session duration: 1h30m"},
-	}
+	logger := NewActivityLogger()
 
-	for _, a := range activities {
-		if err := logActivity(a.userID, a.action, a.details); err != nil {
-			log.Printf("Failed to log activity: %v", err)
-		} else {
-			fmt.Printf("Logged %s action for user %s\n", a.action, a.userID)
-		}
+	http.HandleFunc("/api/data", loggingMiddleware(logger, func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("Data endpoint response"))
+	}))
+
+	http.HandleFunc("/admin/activities", activityHandler(logger))
+
+	log.Println("Server starting on :8080")
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		log.Fatal(err)
 	}
 }
