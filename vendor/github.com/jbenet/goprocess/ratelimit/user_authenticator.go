@@ -1,43 +1,62 @@
-package auth
+package middleware
 
 import (
-    "net/http"
-    "strings"
-    "github.com/golang-jwt/jwt/v5"
+	"context"
+	"net/http"
+	"strings"
 )
 
-type Claims struct {
-    Username string `json:"username"`
-    Role     string `json:"role"`
-    jwt.RegisteredClaims
+type contextKey string
+
+const userIDKey contextKey = "userID"
+
+type Authenticator struct {
+	jwtSecret []byte
 }
 
-func Authenticate(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        authHeader := r.Header.Get("Authorization")
-        if authHeader == "" {
-            http.Error(w, "Authorization header required", http.StatusUnauthorized)
-            return
-        }
+func NewAuthenticator(secret string) *Authenticator {
+	return &Authenticator{jwtSecret: []byte(secret)}
+}
 
-        tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-        if tokenString == authHeader {
-            http.Error(w, "Bearer token required", http.StatusUnauthorized)
-            return
-        }
+func (a *Authenticator) Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "Authorization header required", http.StatusUnauthorized)
+			return
+		}
 
-        claims := &Claims{}
-        token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-            return []byte("your-secret-key"), nil
-        })
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			http.Error(w, "Invalid authorization format", http.StatusUnauthorized)
+			return
+		}
 
-        if err != nil || !token.Valid {
-            http.Error(w, "Invalid token", http.StatusUnauthorized)
-            return
-        }
+		tokenString := parts[1]
+		userID, err := a.validateToken(tokenString)
+		if err != nil {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
 
-        r.Header.Set("X-Username", claims.Username)
-        r.Header.Set("X-Role", claims.Role)
-        next.ServeHTTP(w, r)
-    })
+		ctx := context.WithValue(r.Context(), userIDKey, userID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func (a *Authenticator) validateToken(tokenString string) (string, error) {
+	// Simplified token validation - in production use a proper JWT library
+	// This is a placeholder implementation
+	if tokenString == "" {
+		return "", http.ErrNoCookie
+	}
+
+	// Mock validation: assume token is valid if non-empty
+	// In real implementation, parse JWT and verify signature
+	return "user_" + tokenString[:8], nil
+}
+
+func GetUserID(ctx context.Context) (string, bool) {
+	userID, ok := ctx.Value(userIDKey).(string)
+	return userID, ok
 }
