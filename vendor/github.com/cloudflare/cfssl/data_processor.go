@@ -4,7 +4,6 @@ package main
 import (
     "encoding/csv"
     "errors"
-    "fmt"
     "io"
     "os"
     "strconv"
@@ -15,112 +14,83 @@ type DataRecord struct {
     ID    int
     Name  string
     Value float64
+    Valid bool
 }
 
-func ProcessCSVFile(filename string) ([]DataRecord, error) {
-    file, err := os.Open(filename)
+func ParseCSVFile(filePath string) ([]DataRecord, error) {
+    file, err := os.Open(filePath)
     if err != nil {
-        return nil, fmt.Errorf("failed to open file: %w", err)
+        return nil, err
     }
     defer file.Close()
 
     reader := csv.NewReader(file)
-    records := []DataRecord{}
-    lineNumber := 0
+    records := make([]DataRecord, 0)
+
+    // Skip header
+    _, err = reader.Read()
+    if err != nil {
+        return nil, err
+    }
 
     for {
-        lineNumber++
         row, err := reader.Read()
         if err == io.EOF {
             break
         }
         if err != nil {
-            return nil, fmt.Errorf("csv read error at line %d: %w", lineNumber, err)
-        }
-
-        if len(row) != 3 {
-            return nil, fmt.Errorf("invalid column count at line %d: expected 3, got %d", lineNumber, len(row))
-        }
-
-        record, err := parseRecord(row, lineNumber)
-        if err != nil {
             return nil, err
         }
 
-        records = append(records, record)
-    }
+        if len(row) < 4 {
+            continue
+        }
 
-    if len(records) == 0 {
-        return nil, errors.New("no valid records found in file")
+        id, idErr := strconv.Atoi(strings.TrimSpace(row[0]))
+        name := strings.TrimSpace(row[1])
+        value, valErr := strconv.ParseFloat(strings.TrimSpace(row[2]), 64)
+        valid := strings.ToLower(strings.TrimSpace(row[3])) == "true"
+
+        if idErr != nil || valErr != nil || name == "" {
+            continue
+        }
+
+        record := DataRecord{
+            ID:    id,
+            Name:  name,
+            Value: value,
+            Valid: valid,
+        }
+        records = append(records, record)
     }
 
     return records, nil
 }
 
-func parseRecord(row []string, lineNumber int) (DataRecord, error) {
-    id, err := strconv.Atoi(strings.TrimSpace(row[0]))
-    if err != nil {
-        return DataRecord{}, fmt.Errorf("invalid ID at line %d: %w", lineNumber, err)
-    }
-
-    name := strings.TrimSpace(row[1])
-    if name == "" {
-        return DataRecord{}, fmt.Errorf("empty name at line %d", lineNumber)
-    }
-
-    value, err := strconv.ParseFloat(strings.TrimSpace(row[2]), 64)
-    if err != nil {
-        return DataRecord{}, fmt.Errorf("invalid value at line %d: %w", lineNumber, err)
-    }
-
-    return DataRecord{
-        ID:    id,
-        Name:  name,
-        Value: value,
-    }, nil
-}
-
-func CalculateStatistics(records []DataRecord) (float64, float64, int) {
+func ValidateRecords(records []DataRecord) ([]DataRecord, error) {
     if len(records) == 0 {
-        return 0, 0, 0
+        return nil, errors.New("no records to validate")
     }
 
-    var sum float64
-    min := records[0].Value
-    max := records[0].Value
-
+    validRecords := make([]DataRecord, 0)
     for _, record := range records {
-        sum += record.Value
-        if record.Value < min {
-            min = record.Value
-        }
-        if record.Value > max {
-            max = record.Value
+        if record.Valid && record.Value >= 0 {
+            validRecords = append(validRecords, record)
         }
     }
 
-    average := sum / float64(len(records))
-    return average, max - min, len(records)
+    return validRecords, nil
 }
 
-func ValidateRecords(records []DataRecord) []error {
-    var errors []error
-    seenIDs := make(map[int]bool)
-
-    for i, record := range records {
-        if record.ID <= 0 {
-            errors = append(errors, fmt.Errorf("record %d: invalid ID %d", i, record.ID))
-        }
-
-        if seenIDs[record.ID] {
-            errors = append(errors, fmt.Errorf("record %d: duplicate ID %d", i, record.ID))
-        }
-        seenIDs[record.ID] = true
-
-        if record.Value < 0 {
-            errors = append(errors, fmt.Errorf("record %d: negative value %f", i, record.Value))
-        }
+func CalculateAverage(records []DataRecord) float64 {
+    if len(records) == 0 {
+        return 0.0
     }
 
-    return errors
+    total := 0.0
+    for _, record := range records {
+        total += record.Value
+    }
+
+    return total / float64(len(records))
 }
