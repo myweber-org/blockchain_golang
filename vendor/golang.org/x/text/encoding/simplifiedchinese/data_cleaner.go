@@ -2,68 +2,33 @@
 package main
 
 import (
-	"encoding/csv"
 	"fmt"
-	"io"
-	"os"
+	"strings"
 )
 
-func removeDuplicates(inputPath, outputPath string) error {
-	inFile, err := os.Open(inputPath)
-	if err != nil {
-		return fmt.Errorf("failed to open input file: %w", err)
-	}
-	defer inFile.Close()
-
-	outFile, err := os.Create(outputPath)
-	if err != nil {
-		return fmt.Errorf("failed to create output file: %w", err)
-	}
-	defer outFile.Close()
-
-	reader := csv.NewReader(inFile)
-	writer := csv.NewWriter(outFile)
-	defer writer.Flush()
-
-	seen := make(map[string]bool)
-	headers, err := reader.Read()
-	if err != nil {
-		return fmt.Errorf("failed to read headers: %w", err)
-	}
-	if err := writer.Write(headers); err != nil {
-		return fmt.Errorf("failed to write headers: %w", err)
-	}
-
-	for {
-		record, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("failed to read record: %w", err)
-		}
-		key := fmt.Sprintf("%v", record)
-		if !seen[key] {
-			seen[key] = true
-			if err := writer.Write(record); err != nil {
-				return fmt.Errorf("failed to write record: %w", err)
-			}
+func DeduplicateStrings(slice []string) []string {
+	seen := make(map[string]struct{})
+	result := []string{}
+	for _, item := range slice {
+		if _, exists := seen[item]; !exists {
+			seen[item] = struct{}{}
+			result = append(result, item)
 		}
 	}
-	return nil
+	return result
+}
+
+func NormalizeWhitespace(input string) string {
+	words := strings.Fields(input)
+	return strings.Join(words, " ")
 }
 
 func main() {
-	if len(os.Args) != 3 {
-		fmt.Println("Usage: data_cleaner <input.csv> <output.csv>")
-		os.Exit(1)
-	}
-	inputPath := os.Args[1]
-	outputPath := os.Args[2]
+	data := []string{"apple", "banana", "apple", "cherry", "banana"}
+	unique := DeduplicateStrings(data)
+	fmt.Println("Deduplicated:", unique)
 
-	if err := removeDuplicates(inputPath, outputPath); err != nil {
-		fmt.Printf("Error: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Println("Duplicate removal completed successfully")
+	text := "  Hello    world!   This  is   a   test.  "
+	normalized := NormalizeWhitespace(text)
+	fmt.Println("Normalized:", normalized)
 }
