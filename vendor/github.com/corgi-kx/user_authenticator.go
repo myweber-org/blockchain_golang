@@ -11,20 +11,20 @@ import (
 type contextKey string
 
 const (
-	userIDKey contextKey = "userID"
+	UserIDKey contextKey = "userID"
 )
 
-type AuthMiddleware struct {
+type Authenticator struct {
 	secretKey []byte
 }
 
-func NewAuthMiddleware(secretKey string) *AuthMiddleware {
-	return &AuthMiddleware{
+func NewAuthenticator(secretKey string) *Authenticator {
+	return &Authenticator{
 		secretKey: []byte(secretKey),
 	}
 }
 
-func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
+func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
@@ -43,11 +43,11 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, jwt.ErrSignatureInvalid
 			}
-			return m.secretKey, nil
+			return a.secretKey, nil
 		})
 
 		if err != nil || !token.Valid {
-			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
 		}
 
@@ -58,17 +58,17 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 		}
 
 		userID, ok := claims["user_id"].(string)
-		if !ok {
-			http.Error(w, "User ID not found in token", http.StatusUnauthorized)
+		if !ok || userID == "" {
+			http.Error(w, "Invalid user ID in token", http.StatusUnauthorized)
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), userIDKey, userID)
+		ctx := context.WithValue(r.Context(), UserIDKey, userID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
 func GetUserID(ctx context.Context) (string, bool) {
-	userID, ok := ctx.Value(userIDKey).(string)
+	userID, ok := ctx.Value(UserIDKey).(string)
 	return userID, ok
 }
