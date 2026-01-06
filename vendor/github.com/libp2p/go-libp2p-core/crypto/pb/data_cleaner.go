@@ -1,58 +1,24 @@
+
 package main
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
-type DataRecord struct {
-	ID    int
-	Email string
-	Valid bool
-}
+func RemoveDuplicates(input []int) []int {
+	seen := make(map[int]bool)
+	result := []int{}
 
-func DeduplicateRecords(records []DataRecord) []DataRecord {
-	seen := make(map[string]bool)
-	var unique []DataRecord
-	for _, record := range records {
-		key := strings.ToLower(strings.TrimSpace(record.Email))
-		if !seen[key] {
-			seen[key] = true
-			unique = append(unique, record)
+	for _, value := range input {
+		if !seen[value] {
+			seen[value] = true
+			result = append(result, value)
 		}
 	}
-	return unique
-}
-
-func ValidateEmails(records []DataRecord) []DataRecord {
-	var valid []DataRecord
-	for _, record := range records {
-		if strings.Contains(record.Email, "@") && len(record.Email) > 3 {
-			record.Valid = true
-			valid = append(valid, record)
-		}
-	}
-	return valid
-}
-
-func ProcessData(records []DataRecord) []DataRecord {
-	deduped := DeduplicateRecords(records)
-	validated := ValidateEmails(deduped)
-	return validated
+	return result
 }
 
 func main() {
-	sampleData := []DataRecord{
-		{1, "user@example.com", false},
-		{2, "user@example.com", false},
-		{3, "invalid-email", false},
-		{4, "test@domain.org", false},
-		{5, "TEST@DOMAIN.ORG", false},
-	}
-
-	processed := ProcessData(sampleData)
-	fmt.Printf("Processed %d records\n", len(processed))
-	for _, record := range processed {
-		fmt.Printf("ID: %d, Email: %s, Valid: %v\n", record.ID, record.Email, record.Valid)
-	}
+	data := []int{1, 2, 2, 3, 4, 4, 5, 1, 6}
+	cleaned := RemoveDuplicates(data)
+	fmt.Println("Original:", data)
+	fmt.Println("Cleaned:", cleaned)
 }
