@@ -3,22 +3,22 @@ package main
 
 import "fmt"
 
-func RemoveDuplicates(nums []int) []int {
-	seen := make(map[int]bool)
-	result := []int{}
+func RemoveDuplicates(input []string) []string {
+	seen := make(map[string]struct{})
+	result := make([]string, 0, len(input))
 
-	for _, num := range nums {
-		if !seen[num] {
-			seen[num] = true
-			result = append(result, num)
+	for _, item := range input {
+		if _, exists := seen[item]; !exists {
+			seen[item] = struct{}{}
+			result = append(result, item)
 		}
 	}
 	return result
 }
 
 func main() {
-	input := []int{1, 2, 2, 3, 4, 4, 5, 1, 6}
-	cleaned := RemoveDuplicates(input)
-	fmt.Printf("Original: %v\n", input)
-	fmt.Printf("Cleaned: %v\n", cleaned)
+	data := []string{"apple", "banana", "apple", "orange", "banana", "grape"}
+	cleaned := RemoveDuplicates(data)
+	fmt.Println("Original:", data)
+	fmt.Println("Cleaned:", cleaned)
 }
