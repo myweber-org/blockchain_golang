@@ -15,38 +15,40 @@ func NewDataCleaner() *DataCleaner {
 	}
 }
 
-func (dc *DataCleaner) Normalize(input string) string {
-	return strings.ToLower(strings.TrimSpace(input))
-}
-
-func (dc *DataCleaner) IsDuplicate(value string) bool {
-	normalized := dc.Normalize(value)
-	if dc.seen[normalized] {
-		return true
-	}
-	dc.seen[normalized] = true
-	return false
-}
-
-func (dc *DataCleaner) Deduplicate(values []string) []string {
-	dc.seen = make(map[string]bool)
+func (dc *DataCleaner) RemoveDuplicates(input []string) []string {
 	var result []string
-	for _, v := range values {
-		if !dc.IsDuplicate(v) {
-			result = append(result, v)
+	for _, item := range input {
+		normalized := strings.ToLower(strings.TrimSpace(item))
+		if !dc.seen[normalized] {
+			dc.seen[normalized] = true
+			result = append(result, item)
 		}
 	}
 	return result
 }
 
+func (dc *DataCleaner) Reset() {
+	dc.seen = make(map[string]bool)
+}
+
 func main() {
 	cleaner := NewDataCleaner()
-	data := []string{"Apple", "apple ", " BANANA", "banana", "Cherry"}
 	
-	fmt.Println("Original data:", data)
-	deduped := cleaner.Deduplicate(data)
-	fmt.Println("Deduplicated:", deduped)
+	data := []string{
+		"apple",
+		"Apple",
+		"banana",
+		"  banana  ",
+		"cherry",
+		"APPLE",
+		"date",
+	}
 	
-	testValue := "  APPLE  "
-	fmt.Printf("Is '%s' duplicate? %v\n", testValue, cleaner.IsDuplicate(testValue))
+	unique := cleaner.RemoveDuplicates(data)
+	fmt.Println("Original:", data)
+	fmt.Println("Cleaned:", unique)
+	
+	cleaner.Reset()
+	testData := []string{"test", "TEST", "Test"}
+	fmt.Println("After reset:", cleaner.RemoveDuplicates(testData))
 }
