@@ -1,62 +1,62 @@
 package config
 
 import (
-	"io/ioutil"
-	"log"
+    "fmt"
+    "io/ioutil"
+    "os"
 
-	"gopkg.in/yaml.v2"
+    "gopkg.in/yaml.v2"
 )
 
 type DatabaseConfig struct {
-	Host     string `yaml:"host"`
-	Port     int    `yaml:"port"`
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
-	Database string `yaml:"database"`
+    Host     string `yaml:"host"`
+    Port     int    `yaml:"port"`
+    Username string `yaml:"username"`
+    Password string `yaml:"password"`
+    Name     string `yaml:"name"`
 }
 
 type ServerConfig struct {
-	Port         int    `yaml:"port"`
-	ReadTimeout  int    `yaml:"read_timeout"`
-	WriteTimeout int    `yaml:"write_timeout"`
-	DebugMode    bool   `yaml:"debug_mode"`
-	LogLevel     string `yaml:"log_level"`
+    Port         int            `yaml:"port"`
+    ReadTimeout  int            `yaml:"read_timeout"`
+    WriteTimeout int            `yaml:"write_timeout"`
+    Database     DatabaseConfig `yaml:"database"`
 }
 
-type AppConfig struct {
-	Server   ServerConfig   `yaml:"server"`
-	Database DatabaseConfig `yaml:"database"`
+func LoadConfig(path string) (*ServerConfig, error) {
+    if _, err := os.Stat(path); os.IsNotExist(err) {
+        return nil, fmt.Errorf("config file not found: %s", path)
+    }
+
+    data, err := ioutil.ReadFile(path)
+    if err != nil {
+        return nil, fmt.Errorf("failed to read config file: %v", err)
+    }
+
+    var config ServerConfig
+    if err := yaml.Unmarshal(data, &config); err != nil {
+        return nil, fmt.Errorf("failed to parse YAML: %v", err)
+    }
+
+    if err := validateConfig(&config); err != nil {
+        return nil, fmt.Errorf("config validation failed: %v", err)
+    }
+
+    return &config, nil
 }
 
-func LoadConfig(filePath string) (*AppConfig, error) {
-	data, err := ioutil.ReadFile(filePath)
-	if err != nil {
-		log.Printf("Failed to read config file: %v", err)
-		return nil, err
-	}
+func validateConfig(config *ServerConfig) error {
+    if config.Port <= 0 || config.Port > 65535 {
+        return fmt.Errorf("invalid server port: %d", config.Port)
+    }
 
-	var config AppConfig
-	err = yaml.Unmarshal(data, &config)
-	if err != nil {
-		log.Printf("Failed to parse YAML config: %v", err)
-		return nil, err
-	}
+    if config.Database.Host == "" {
+        return fmt.Errorf("database host is required")
+    }
 
-	return &config, nil
-}
+    if config.Database.Port <= 0 || config.Database.Port > 65535 {
+        return fmt.Errorf("invalid database port: %d", config.Database.Port)
+    }
 
-func ValidateConfig(config *AppConfig) error {
-	if config.Server.Port <= 0 || config.Server.Port > 65535 {
-		return fmt.Errorf("invalid server port: %d", config.Server.Port)
-	}
-
-	if config.Database.Host == "" {
-		return fmt.Errorf("database host cannot be empty")
-	}
-
-	if config.Database.Port <= 0 || config.Database.Port > 65535 {
-		return fmt.Errorf("invalid database port: %d", config.Database.Port)
-	}
-
-	return nil
+    return nil
 }
