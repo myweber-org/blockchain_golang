@@ -10,10 +10,12 @@ import (
 
 type contextKey string
 
-const userIDKey contextKey = "userID"
+const userContextKey contextKey = "user"
 
-type Claims struct {
-	UserID string `json:"user_id"`
+type UserClaims struct {
+	UserID   string `json:"user_id"`
+	Username string `json:"username"`
+	Role     string `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -33,7 +35,7 @@ func AuthMiddleware(secretKey string) func(http.Handler) http.Handler {
 			}
 
 			tokenStr := parts[1]
-			claims := &Claims{}
+			claims := &UserClaims{}
 
 			token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
 				return []byte(secretKey), nil
@@ -44,74 +46,15 @@ func AuthMiddleware(secretKey string) func(http.Handler) http.Handler {
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), userIDKey, claims.UserID)
+			ctx := context.WithValue(r.Context(), userContextKey, claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
 
-func GetUserID(ctx context.Context) (string, bool) {
-	userID, ok := ctx.Value(userIDKey).(string)
-	return userID, ok
-}
-package auth
-
-import (
-    "errors"
-    "time"
-
-    "github.com/golang-jwt/jwt/v5"
-)
-
-type Claims struct {
-    UserID   string `json:"user_id"`
-    Username string `json:"username"`
-    Role     string `json:"role"`
-    jwt.RegisteredClaims
-}
-
-var jwtSecret = []byte("your-secret-key-change-in-production")
-
-func GenerateToken(userID, username, role string) (string, error) {
-    expirationTime := time.Now().Add(24 * time.Hour)
-    
-    claims := &Claims{
-        UserID:   userID,
-        Username: username,
-        Role:     role,
-        RegisteredClaims: jwt.RegisteredClaims{
-            ExpiresAt: jwt.NewNumericDate(expirationTime),
-            IssuedAt:  jwt.NewNumericDate(time.Now()),
-            Issuer:    "auth-service",
-        },
-    }
-
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-    return token.SignedString(jwtSecret)
-}
-
-func ValidateToken(tokenString string) (*Claims, error) {
-    claims := &Claims{}
-    
-    token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-        return jwtSecret, nil
-    })
-
-    if err != nil {
-        return nil, err
-    }
-
-    if !token.Valid {
-        return nil, errors.New("invalid token")
-    }
-
-    return claims, nil
-}
-
-func ExtractUserID(tokenString string) (string, error) {
-    claims, err := ValidateToken(tokenString)
-    if err != nil {
-        return "", err
-    }
-    return claims.UserID, nil
+func GetUserFromContext(ctx context.Context) *UserClaims {
+	if user, ok := ctx.Value(userContextKey).(*UserClaims); ok {
+		return user
+	}
+	return nil
 }
