@@ -1,52 +1,41 @@
 package auth
 
 import (
-    "errors"
-    "time"
-
-    "github.com/golang-jwt/jwt/v4"
-)
-
-var (
-    ErrInvalidToken = errors.New("invalid token")
-    secretKey       = []byte("your-secret-key-change-in-production")
+    "net/http"
+    "strings"
+    "github.com/dgrijalva/jwt-go"
 )
 
 type Claims struct {
-    UserID string `json:"user_id"`
-    Email  string `json:"email"`
-    jwt.RegisteredClaims
+    Username string `json:"username"`
+    Role     string `json:"role"`
+    jwt.StandardClaims
 }
 
-func GenerateToken(userID, email string) (string, error) {
-    expirationTime := time.Now().Add(24 * time.Hour)
-    claims := &Claims{
-        UserID: userID,
-        Email:  email,
-        RegisteredClaims: jwt.RegisteredClaims{
-            ExpiresAt: jwt.NewNumericDate(expirationTime),
-            IssuedAt:  jwt.NewNumericDate(time.Now()),
-            Issuer:    "myapp",
-        },
-    }
+var jwtKey = []byte("your_secret_key")
 
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-    return token.SignedString(secretKey)
-}
+func Authenticate(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        authHeader := r.Header.Get("Authorization")
+        if authHeader == "" {
+            http.Error(w, "Missing authorization header", http.StatusUnauthorized)
+            return
+        }
 
-func ValidateToken(tokenString string) (*Claims, error) {
-    claims := &Claims{}
-    token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-        return secretKey, nil
+        tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+        claims := &Claims{}
+
+        token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+            return jwtKey, nil
+        })
+
+        if err != nil || !token.Valid {
+            http.Error(w, "Invalid token", http.StatusUnauthorized)
+            return
+        }
+
+        r.Header.Set("X-Username", claims.Username)
+        r.Header.Set("X-Role", claims.Role)
+        next.ServeHTTP(w, r)
     })
-
-    if err != nil {
-        return nil, err
-    }
-
-    if !token.Valid {
-        return nil, ErrInvalidToken
-    }
-
-    return claims, nil
 }
