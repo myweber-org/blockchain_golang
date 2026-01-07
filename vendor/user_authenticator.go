@@ -48,4 +48,56 @@ func Authenticate(jwtSecret string) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}package middleware
+
+import (
+	"context"
+	"net/http"
+	"strings"
+)
+
+type contextKey string
+
+const userIDKey contextKey = "userID"
+
+func Authenticate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "Authorization header required", http.StatusUnauthorized)
+			return
+		}
+
+		tokenParts := strings.Split(authHeader, " ")
+		if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
+			http.Error(w, "Invalid authorization format", http.StatusUnauthorized)
+			return
+		}
+
+		userID, err := validateToken(tokenParts[1])
+		if err != nil {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), userIDKey, userID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func validateToken(tokenString string) (string, error) {
+	// Token validation logic would go here
+	// For example, using github.com/golang-jwt/jwt
+	// This is a simplified placeholder
+	if tokenString == "" {
+		return "", http.ErrNoCookie
+	}
+	return "user123", nil
+}
+
+func GetUserID(ctx context.Context) string {
+	if userID, ok := ctx.Value(userIDKey).(string); ok {
+		return userID
+	}
+	return ""
 }
