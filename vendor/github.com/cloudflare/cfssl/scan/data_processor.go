@@ -85,4 +85,30 @@ func ProcessUserInput(data UserData) (UserData, error) {
 	}
 	TransformUserName(&data)
 	return data, nil
+}package data
+
+import (
+	"regexp"
+	"strings"
+)
+
+// ValidateEmail checks if the provided string is a valid email address.
+func ValidateEmail(email string) bool {
+	pattern := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
+	matched, _ := regexp.MatchString(pattern, email)
+	return matched
+}
+
+// SanitizeInput removes leading and trailing whitespace from a string.
+func SanitizeInput(input string) string {
+	return strings.TrimSpace(input)
+}
+
+// TransformToSlug converts a string into a URL-friendly slug.
+func TransformToSlug(s string) string {
+	lower := strings.ToLower(s)
+	reg := regexp.MustCompile(`[^a-z0-9]+`)
+	slug := reg.ReplaceAllString(lower, "-")
+	slug = strings.Trim(slug, "-")
+	return slug
 }
