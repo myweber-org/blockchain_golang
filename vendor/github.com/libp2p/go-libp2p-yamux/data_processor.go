@@ -1,93 +1,42 @@
-
 package main
 
 import (
-    "encoding/csv"
-    "errors"
-    "fmt"
-    "io"
-    "os"
-    "strconv"
+	"encoding/json"
+	"fmt"
+	"log"
 )
 
-type DataRecord struct {
-    ID    int
-    Name  string
-    Value float64
+type User struct {
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
 }
 
-func ProcessCSVFile(filePath string) ([]DataRecord, error) {
-    file, err := os.Open(filePath)
-    if err != nil {
-        return nil, fmt.Errorf("failed to open file: %w", err)
-    }
-    defer file.Close()
+func ValidateAndParseUser(jsonData []byte) (*User, error) {
+	var user User
+	err := json.Unmarshal(jsonData, &user)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
+	}
 
-    reader := csv.NewReader(file)
-    records := make([]DataRecord, 0)
+	if user.ID <= 0 {
+		return nil, fmt.Errorf("invalid user ID: %d", user.ID)
+	}
+	if user.Name == "" {
+		return nil, fmt.Errorf("user name cannot be empty")
+	}
+	if user.Email == "" {
+		return nil, fmt.Errorf("user email cannot be empty")
+	}
 
-    lineNumber := 0
-    for {
-        lineNumber++
-        row, err := reader.Read()
-        if err == io.EOF {
-            break
-        }
-        if err != nil {
-            return nil, fmt.Errorf("csv read error at line %d: %w", lineNumber, err)
-        }
-
-        if len(row) != 3 {
-            return nil, fmt.Errorf("invalid column count at line %d: expected 3, got %d", lineNumber, len(row))
-        }
-
-        id, err := strconv.Atoi(row[0])
-        if err != nil {
-            return nil, fmt.Errorf("invalid ID format at line %d: %w", lineNumber, err)
-        }
-
-        name := row[1]
-        if name == "" {
-            return nil, fmt.Errorf("empty name at line %d", lineNumber)
-        }
-
-        value, err := strconv.ParseFloat(row[2], 64)
-        if err != nil {
-            return nil, fmt.Errorf("invalid value format at line %d: %w", lineNumber, err)
-        }
-
-        records = append(records, DataRecord{
-            ID:    id,
-            Name:  name,
-            Value: value,
-        })
-    }
-
-    if len(records) == 0 {
-        return nil, errors.New("no valid records found in file")
-    }
-
-    return records, nil
+	return &user, nil
 }
 
-func CalculateTotalValue(records []DataRecord) float64 {
-    total := 0.0
-    for _, record := range records {
-        total += record.Value
-    }
-    return total
-}
-
-func FindMaxValueRecord(records []DataRecord) *DataRecord {
-    if len(records) == 0 {
-        return nil
-    }
-
-    maxRecord := &records[0]
-    for i := 1; i < len(records); i++ {
-        if records[i].Value > maxRecord.Value {
-            maxRecord = &records[i]
-        }
-    }
-    return maxRecord
+func main() {
+	validJSON := []byte(`{"id": 123, "name": "John Doe", "email": "john@example.com"}`)
+	user, err := ValidateAndParseUser(validJSON)
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
+	fmt.Printf("Parsed user: %+v\n", user)
 }
