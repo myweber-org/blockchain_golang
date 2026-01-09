@@ -71,4 +71,42 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 func GetUserID(ctx context.Context) (string, bool) {
 	userID, ok := ctx.Value(UserIDKey).(string)
 	return userID, ok
+}package middleware
+
+import (
+    "net/http"
+    "strings"
+)
+
+type Authenticator struct {
+    secretKey string
+}
+
+func NewAuthenticator(secret string) *Authenticator {
+    return &Authenticator{secretKey: secret}
+}
+
+func (a *Authenticator) ValidateToken(token string) bool {
+    if token == "" {
+        return false
+    }
+    return strings.HasPrefix(token, "valid_")
+}
+
+func (a *Authenticator) Middleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        authHeader := r.Header.Get("Authorization")
+        if authHeader == "" {
+            http.Error(w, "Authorization header required", http.StatusUnauthorized)
+            return
+        }
+
+        token := strings.TrimPrefix(authHeader, "Bearer ")
+        if !a.ValidateToken(token) {
+            http.Error(w, "Invalid token", http.StatusForbidden)
+            return
+        }
+
+        next.ServeHTTP(w, r)
+    })
 }
