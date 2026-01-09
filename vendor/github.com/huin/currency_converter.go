@@ -23,7 +23,7 @@ func NewCurrencyConverter() *CurrencyConverter {
 }
 
 func (c *CurrencyConverter) AddRate(from, to string, rate float64) {
-	key := from + "_" + to
+	key := from + "->" + to
 	c.rates[key] = ExchangeRate{
 		FromCurrency: from,
 		ToCurrency:   to,
@@ -37,7 +37,7 @@ func (c *CurrencyConverter) Convert(amount float64, from, to string) (float64, e
 		return amount, nil
 	}
 
-	key := from + "_" + to
+	key := from + "->" + to
 	rate, exists := c.rates[key]
 	if !exists {
 		return 0, fmt.Errorf("exchange rate not found for %s to %s", from, to)
@@ -70,7 +70,7 @@ func main() {
 	amount := 100.0
 	converted, err := converter.Convert(amount, "USD", "EUR")
 	if err != nil {
-		fmt.Printf("Error: %v\n", err)
+		fmt.Printf("Conversion error: %v\n", err)
 		return
 	}
 	
