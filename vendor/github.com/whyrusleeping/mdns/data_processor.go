@@ -142,4 +142,57 @@ func ProcessUserInput(username, email string, age int) {
 func main() {
 	ProcessUserInput("  JohnDoe  ", "JOHN@EXAMPLE.COM", 30)
 	ProcessUserInput("", "invalid-email", 200)
+}package data
+
+import (
+	"errors"
+	"regexp"
+	"strings"
+)
+
+type Record struct {
+	ID    string
+	Email string
+	Tags  []string
+}
+
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+
+func ValidateEmail(email string) error {
+	if !emailRegex.MatchString(email) {
+		return errors.New("invalid email format")
+	}
+	return nil
+}
+
+func NormalizeTags(tags []string) []string {
+	unique := make(map[string]bool)
+	var result []string
+
+	for _, tag := range tags {
+		normalized := strings.ToLower(strings.TrimSpace(tag))
+		if normalized != "" && !unique[normalized] {
+			unique[normalized] = true
+			result = append(result, normalized)
+		}
+	}
+	return result
+}
+
+func ProcessRecord(record Record) (Record, error) {
+	if err := ValidateEmail(record.Email); err != nil {
+		return Record{}, err
+	}
+
+	processed := Record{
+		ID:    strings.TrimSpace(record.ID),
+		Email: strings.ToLower(strings.TrimSpace(record.Email)),
+		Tags:  NormalizeTags(record.Tags),
+	}
+
+	if processed.ID == "" {
+		return Record{}, errors.New("record ID cannot be empty")
+	}
+
+	return processed, nil
 }
