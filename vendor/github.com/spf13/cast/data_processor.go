@@ -89,4 +89,37 @@ func GenerateReport(records []DataRecord) {
 	active := FilterActiveRecords(records)
 	fmt.Printf("Active records: %d\n", len(active))
 	fmt.Printf("Inactive records: %d\n", len(records)-len(active))
+}package main
+
+import (
+    "errors"
+    "strings"
+)
+
+func ValidateEmail(email string) error {
+    if email == "" {
+        return errors.New("email cannot be empty")
+    }
+    if !strings.Contains(email, "@") {
+        return errors.New("invalid email format")
+    }
+    return nil
+}
+
+func TrimAndTitle(input string) string {
+    trimmed := strings.TrimSpace(input)
+    if trimmed == "" {
+        return trimmed
+    }
+    return strings.ToUpper(trimmed[:1]) + strings.ToLower(trimmed[1:])
+}
+
+func FilterEmptyStrings(slice []string) []string {
+    result := []string{}
+    for _, s := range slice {
+        if strings.TrimSpace(s) != "" {
+            result = append(result, s)
+        }
+    }
+    return result
 }
