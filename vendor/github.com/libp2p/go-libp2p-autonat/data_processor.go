@@ -1,84 +1,52 @@
-package data_processor
+
+package main
 
 import (
-	"encoding/csv"
-	"errors"
-	"io"
-	"os"
-	"strconv"
+	"regexp"
+	"strings"
 )
 
-type DataRecord struct {
-	ID    int
-	Name  string
-	Value float64
+type DataProcessor struct {
+	whitespaceRegex *regexp.Regexp
 }
 
-func ParseCSVFile(filePath string) ([]DataRecord, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, err
+func NewDataProcessor() *DataProcessor {
+	return &DataProcessor{
+		whitespaceRegex: regexp.MustCompile(`\s+`),
 	}
-	defer file.Close()
-
-	reader := csv.NewReader(file)
-	records := []DataRecord{}
-	lineNumber := 0
-
-	for {
-		line, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		lineNumber++
-		if lineNumber == 1 {
-			continue
-		}
-
-		if len(line) != 3 {
-			return nil, errors.New("invalid column count at line " + strconv.Itoa(lineNumber))
-		}
-
-		id, err := strconv.Atoi(line[0])
-		if err != nil {
-			return nil, errors.New("invalid ID at line " + strconv.Itoa(lineNumber))
-		}
-
-		name := line[1]
-		if name == "" {
-			return nil, errors.New("empty name at line " + strconv.Itoa(lineNumber))
-		}
-
-		value, err := strconv.ParseFloat(line[2], 64)
-		if err != nil {
-			return nil, errors.New("invalid value at line " + strconv.Itoa(lineNumber))
-		}
-
-		records = append(records, DataRecord{
-			ID:    id,
-			Name:  name,
-			Value: value,
-		})
-	}
-
-	return records, nil
 }
 
-func ValidateRecords(records []DataRecord) ([]DataRecord, []DataRecord) {
-	valid := []DataRecord{}
-	invalid := []DataRecord{}
+func (dp *DataProcessor) CleanInput(input string) string {
+	trimmed := strings.TrimSpace(input)
+	normalized := dp.whitespaceRegex.ReplaceAllString(trimmed, " ")
+	return normalized
+}
 
-	for _, record := range records {
-		if record.ID > 0 && record.Value >= 0 {
-			valid = append(valid, record)
-		} else {
-			invalid = append(invalid, record)
-		}
+func (dp *DataProcessor) NormalizeCase(input string, toUpper bool) string {
+	cleaned := dp.CleanInput(input)
+	if toUpper {
+		return strings.ToUpper(cleaned)
 	}
+	return strings.ToLower(cleaned)
+}
 
-	return valid, invalid
+func (dp *DataProcessor) ExtractAlphanumeric(input string) string {
+	alnumRegex := regexp.MustCompile(`[^a-zA-Z0-9]+`)
+	cleaned := dp.CleanInput(input)
+	return alnumRegex.ReplaceAllString(cleaned, "")
+}
+
+func main() {
+	processor := NewDataProcessor()
+	
+	sample := "  Hello   World! 123  "
+	
+	cleaned := processor.CleanInput(sample)
+	println("Cleaned:", cleaned)
+	
+	upper := processor.NormalizeCase(sample, true)
+	println("Uppercase:", upper)
+	
+	alnum := processor.ExtractAlphanumeric(sample)
+	println("Alphanumeric only:", alnum)
 }
