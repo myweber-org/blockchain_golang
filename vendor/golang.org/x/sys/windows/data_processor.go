@@ -87,4 +87,103 @@ func GenerateReport(records []DataRecord) {
 	fmt.Printf("Total records processed: %d\n", len(records))
 	fmt.Printf("Valid records: %d\n", validCount)
 	fmt.Printf("Invalid records: %d\n", len(records)-validCount)
+}package main
+
+import (
+	"encoding/csv"
+	"fmt"
+	"io"
+	"os"
+	"strconv"
+)
+
+type Record struct {
+	ID    int
+	Name  string
+	Value float64
+}
+
+func processCSV(filename string) ([]Record, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	var records []Record
+	lineNum := 0
+
+	for {
+		line, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("csv read error at line %d: %w", lineNum, err)
+		}
+		lineNum++
+
+		if len(line) != 3 {
+			return nil, fmt.Errorf("invalid column count at line %d", lineNum)
+		}
+
+		id, err := strconv.Atoi(line[0])
+		if err != nil {
+			return nil, fmt.Errorf("invalid ID at line %d: %w", lineNum, err)
+		}
+
+		value, err := strconv.ParseFloat(line[2], 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value at line %d: %w", lineNum, err)
+		}
+
+		records = append(records, Record{
+			ID:    id,
+			Name:  line[1],
+			Value: value,
+		})
+	}
+
+	return records, nil
+}
+
+func validateRecords(records []Record) error {
+	seenIDs := make(map[int]bool)
+	for _, r := range records {
+		if r.ID <= 0 {
+			return fmt.Errorf("invalid ID %d: must be positive", r.ID)
+		}
+		if r.Name == "" {
+			return fmt.Errorf("record ID %d has empty name", r.ID)
+		}
+		if seenIDs[r.ID] {
+			return fmt.Errorf("duplicate ID %d found", r.ID)
+		}
+		seenIDs[r.ID] = true
+	}
+	return nil
+}
+
+func main() {
+	if len(os.Args) < 2 {
+		fmt.Println("Usage: data_processor <csv_file>")
+		os.Exit(1)
+	}
+
+	records, err := processCSV(os.Args[1])
+	if err != nil {
+		fmt.Printf("Processing error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := validateRecords(records); err != nil {
+		fmt.Printf("Validation error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Successfully processed %d records\n", len(records))
+	for _, r := range records {
+		fmt.Printf("ID: %d, Name: %s, Value: %.2f\n", r.ID, r.Name, r.Value)
+	}
 }
