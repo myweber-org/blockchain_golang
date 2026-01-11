@@ -115,4 +115,68 @@ func Authenticate(next http.HandlerFunc) http.HandlerFunc {
 
         next.ServeHTTP(w, r)
     }
+}package middleware
+
+import (
+    "net/http"
+    "strings"
+    "time"
+
+    "github.com/golang-jwt/jwt/v4"
+)
+
+type Claims struct {
+    Username string `json:"username"`
+    UserID   int    `json:"user_id"`
+    jwt.RegisteredClaims
+}
+
+var jwtKey = []byte("your_secret_key_here")
+
+func AuthMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        authHeader := r.Header.Get("Authorization")
+        if authHeader == "" {
+            http.Error(w, "Authorization header required", http.StatusUnauthorized)
+            return
+        }
+
+        tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+        claims := &Claims{}
+
+        token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+            return jwtKey, nil
+        })
+
+        if err != nil || !token.Valid {
+            http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+            return
+        }
+
+        if claims.ExpiresAt.Time.Before(time.Now()) {
+            http.Error(w, "Token expired", http.StatusUnauthorized)
+            return
+        }
+
+        r.Header.Set("X-User-ID", string(rune(claims.UserID)))
+        r.Header.Set("X-Username", claims.Username)
+
+        next.ServeHTTP(w, r)
+    })
+}
+
+func GenerateToken(username string, userID int) (string, error) {
+    expirationTime := time.Now().Add(24 * time.Hour)
+    claims := &Claims{
+        Username: username,
+        UserID:   userID,
+        RegisteredClaims: jwt.RegisteredClaims{
+            ExpiresAt: jwt.NewNumericDate(expirationTime),
+            IssuedAt:  jwt.NewNumericDate(time.Now()),
+            Issuer:    "myapp",
+        },
+    }
+
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    return token.SignedString(jwtKey)
 }
