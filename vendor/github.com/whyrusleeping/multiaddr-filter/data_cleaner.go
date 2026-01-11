@@ -51,4 +51,43 @@ func main() {
 	
 	testValue := "  APPLE  "
 	fmt.Printf("Is '%s' duplicate? %v\n", testValue, cleaner.IsDuplicate(testValue))
+}package main
+
+import (
+	"encoding/csv"
+	"io"
+	"strings"
+)
+
+func CleanCSVData(input io.Reader, output io.Writer) error {
+	reader := csv.NewReader(input)
+	writer := csv.NewWriter(output)
+	defer writer.Flush()
+
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		cleanRecord := make([]string, len(record))
+		allEmpty := true
+		for i, field := range record {
+			trimmed := strings.TrimSpace(field)
+			cleanRecord[i] = trimmed
+			if trimmed != "" {
+				allEmpty = false
+			}
+		}
+
+		if !allEmpty {
+			if err := writer.Write(cleanRecord); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
