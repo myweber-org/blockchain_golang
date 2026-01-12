@@ -3,16 +3,20 @@ package middleware
 import (
     "net/http"
     "strings"
-    "github.com/dgrijalva/jwt-go"
+    "time"
+
+    "github.com/golang-jwt/jwt/v5"
 )
 
 type Claims struct {
     Username string `json:"username"`
     Role     string `json:"role"`
-    jwt.StandardClaims
+    jwt.RegisteredClaims
 }
 
-func Authenticate(next http.Handler) http.Handler {
+var jwtKey = []byte("your_secret_key_here")
+
+func AuthMiddleware(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         authHeader := r.Header.Get("Authorization")
         if authHeader == "" {
@@ -21,14 +25,10 @@ func Authenticate(next http.Handler) http.Handler {
         }
 
         tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-        if tokenString == authHeader {
-            http.Error(w, "Bearer token required", http.StatusUnauthorized)
-            return
-        }
-
         claims := &Claims{}
+
         token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-            return []byte("your-secret-key"), nil
+            return jwtKey, nil
         })
 
         if err != nil || !token.Valid {
@@ -36,8 +36,13 @@ func Authenticate(next http.Handler) http.Handler {
             return
         }
 
+        if time.Until(claims.ExpiresAt.Time) < 30*time.Second {
+            http.Error(w, "Token expiring soon", http.StatusUnauthorized)
+            return
+        }
+
         r.Header.Set("X-Username", claims.Username)
-        r.Header.Set("X-Role", claims.Role)
+        r.Header.Set("X-User-Role", claims.Role)
         next.ServeHTTP(w, r)
     })
 }
