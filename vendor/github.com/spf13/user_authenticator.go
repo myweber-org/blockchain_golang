@@ -179,4 +179,174 @@ func GenerateToken(userID, username string) (string, error) {
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(jwtKey)
+}package main
+
+import (
+	"crypto/rand"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+)
+
+type User struct {
+	ID       string
+	Username string
+	Email    string
+	Role     string
+}
+
+type Claims struct {
+	UserID   string `json:"user_id"`
+	Username string `json:"username"`
+	Role     string `json:"role"`
+	jwt.RegisteredClaims
+}
+
+type AuthService struct {
+	jwtSecret     []byte
+	tokenDuration time.Duration
+}
+
+func NewAuthService(secret string, duration time.Duration) (*AuthService, error) {
+	if secret == "" {
+		randomSecret, err := generateRandomSecret(32)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate random secret: %w", err)
+		}
+		secret = randomSecret
+	}
+
+	return &AuthService{
+		jwtSecret:     []byte(secret),
+		tokenDuration: duration,
+	}, nil
+}
+
+func generateRandomSecret(length int) (string, error) {
+	bytes := make([]byte, length)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return base64.URLEncoding.EncodeToString(bytes), nil
+}
+
+func (a *AuthService) GenerateToken(user *User) (string, error) {
+	expirationTime := time.Now().Add(a.tokenDuration)
+
+	claims := &Claims{
+		UserID:   user.ID,
+		Username: user.Username,
+		Role:     user.Role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expirationTime),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Issuer:    "auth-service",
+			Subject:   user.ID,
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString(a.jwtSecret)
+	if err != nil {
+		return "", fmt.Errorf("failed to sign token: %w", err)
+	}
+
+	return tokenString, nil
+}
+
+func (a *AuthService) ValidateToken(tokenString string) (*Claims, error) {
+	claims := &Claims{}
+
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return a.jwtSecret, nil
+	})
+
+	if err != nil {
+		if errors.Is(err, jwt.ErrTokenExpired) {
+			return nil, errors.New("token has expired")
+		}
+		return nil, fmt.Errorf("invalid token: %w", err)
+	}
+
+	if !token.Valid {
+		return nil, errors.New("invalid token")
+	}
+
+	return claims, nil
+}
+
+func (a *AuthService) RefreshToken(tokenString string) (string, error) {
+	claims, err := a.ValidateToken(tokenString)
+	if err != nil {
+		return "", fmt.Errorf("cannot refresh invalid token: %w", err)
+	}
+
+	if time.Until(claims.ExpiresAt.Time) > 30*time.Minute {
+		return "", errors.New("token is not eligible for refresh yet")
+	}
+
+	newClaims := &Claims{
+		UserID:   claims.UserID,
+		Username: claims.Username,
+		Role:     claims.Role,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(a.tokenDuration)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Issuer:    "auth-service",
+			Subject:   claims.UserID,
+		},
+	}
+
+	newToken := jwt.NewWithClaims(jwt.SigningMethodHS256, newClaims)
+	tokenString, err = newToken.SignedString(a.jwtSecret)
+	if err != nil {
+		return "", fmt.Errorf("failed to sign refreshed token: %w", err)
+	}
+
+	return tokenString, nil
+}
+
+func main() {
+	authService, err := NewAuthService("", 15*time.Minute)
+	if err != nil {
+		fmt.Printf("Failed to create auth service: %v\n", err)
+		return
+	}
+
+	user := &User{
+		ID:       "12345",
+		Username: "john_doe",
+		Email:    "john@example.com",
+		Role:     "user",
+	}
+
+	token, err := authService.GenerateToken(user)
+	if err != nil {
+		fmt.Printf("Failed to generate token: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Generated token: %s\n", token)
+
+	claims, err := authService.ValidateToken(token)
+	if err != nil {
+		fmt.Printf("Token validation failed: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Token validated successfully. User: %s, Role: %s\n", claims.Username, claims.Role)
+
+	refreshedToken, err := authService.RefreshToken(token)
+	if err != nil {
+		fmt.Printf("Token refresh failed: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Refreshed token: %s\n", refreshedToken)
 }
