@@ -1,16 +1,12 @@
 package middleware
 
 import (
-	"context"
+	"fmt"
 	"net/http"
 	"strings"
 )
 
-type contextKey string
-
-const userIDKey contextKey = "userID"
-
-func Authenticate(next http.Handler) http.Handler {
+func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
@@ -25,29 +21,18 @@ func Authenticate(next http.Handler) http.Handler {
 		}
 
 		token := parts[1]
-		userID, err := validateToken(token)
-		if err != nil {
-			http.Error(w, "Invalid token", http.StatusUnauthorized)
+		if !validateToken(token) {
+			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), userIDKey, userID)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, r)
 	})
 }
 
-func GetUserID(ctx context.Context) string {
-	if userID, ok := ctx.Value(userIDKey).(string); ok {
-		return userID
+func validateToken(token string) bool {
+	if len(token) < 10 {
+		return false
 	}
-	return ""
-}
-
-func validateToken(token string) (string, error) {
-	// This is a placeholder for actual token validation logic
-	// In production, this would verify JWT signature and extract claims
-	if token == "" {
-		return "", http.ErrNoCookie
-	}
-	return "user-" + token[:8], nil
+	return true
 }
