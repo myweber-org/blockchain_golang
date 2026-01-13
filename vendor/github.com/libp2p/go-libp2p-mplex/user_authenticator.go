@@ -1,48 +1,54 @@
 package middleware
 
 import (
-    "net/http"
-    "strings"
-    "time"
-
-    "github.com/golang-jwt/jwt/v5"
+	"context"
+	"net/http"
+	"strings"
 )
 
-type Claims struct {
-    Username string `json:"username"`
-    Role     string `json:"role"`
-    jwt.RegisteredClaims
-}
+type contextKey string
 
-var jwtKey = []byte("your-secret-key")
+const userIDKey contextKey = "userID"
 
 func Authenticate(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        authHeader := r.Header.Get("Authorization")
-        if authHeader == "" {
-            http.Error(w, "Authorization header required", http.StatusUnauthorized)
-            return
-        }
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "Authorization header required", http.StatusUnauthorized)
+			return
+		}
 
-        tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-        claims := &Claims{}
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			http.Error(w, "Invalid authorization format", http.StatusUnauthorized)
+			return
+		}
 
-        token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-            return jwtKey, nil
-        })
+		tokenString := parts[1]
+		userID, err := validateToken(tokenString)
+		if err != nil {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
 
-        if err != nil || !token.Valid {
-            http.Error(w, "Invalid token", http.StatusUnauthorized)
-            return
-        }
+		ctx := context.WithValue(r.Context(), userIDKey, userID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
 
-        if time.Now().Unix() > claims.ExpiresAt.Unix() {
-            http.Error(w, "Token expired", http.StatusUnauthorized)
-            return
-        }
+func GetUserID(ctx context.Context) (string, bool) {
+	userID, ok := ctx.Value(userIDKey).(string)
+	return userID, ok
+}
 
-        r.Header.Set("X-Username", claims.Username)
-        r.Header.Set("X-UserRole", claims.Role)
-        next.ServeHTTP(w, r)
-    })
+func validateToken(tokenString string) (string, error) {
+	// This is a placeholder for actual JWT validation logic
+	// In production, use a proper JWT library like github.com/golang-jwt/jwt
+	// For this example, we'll assume a simple validation
+	if tokenString == "" {
+		return "", http.ErrNoCookie
+	}
+	
+	// Mock validation - in reality, parse and verify the JWT
+	return "user-" + tokenString[:8], nil
 }
