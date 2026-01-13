@@ -36,19 +36,16 @@ func AuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func validateToken(tokenString string) (string, error) {
-	// In a real implementation, this would parse and validate JWT
-	// For this example, we'll do a simple mock validation
-	if tokenString == "" || len(tokenString) < 10 {
-		return "", http.ErrAbortHandler
-	}
-	
-	// Mock extraction of user ID from token
-	// In reality, you would parse JWT claims
-	return "user_" + tokenString[:8], nil
-}
-
 func GetUserID(ctx context.Context) (string, bool) {
 	userID, ok := ctx.Value(userIDKey).(string)
 	return userID, ok
+}
+
+func validateToken(tokenString string) (string, error) {
+	// Implementation would verify JWT signature and extract claims
+	// This is a simplified placeholder
+	if tokenString == "" {
+		return "", http.ErrNoCookie
+	}
+	return "user123", nil
 }
