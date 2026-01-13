@@ -2,49 +2,40 @@
 package main
 
 import (
-	"errors"
-	"regexp"
-	"strings"
+	"fmt"
 )
 
-type UserData struct {
-	Email    string
-	Username string
-	Age      int
+// CalculateMovingAverage returns a slice containing the moving average of the input slice.
+// The windowSize parameter defines the number of elements to average over.
+// If windowSize is greater than the length of the data slice, an empty slice is returned.
+func CalculateMovingAverage(data []float64, windowSize int) []float64 {
+	if windowSize <= 0 || windowSize > len(data) {
+		return []float64{}
+	}
+
+	result := make([]float64, 0, len(data)-windowSize+1)
+	var sum float64
+
+	// Calculate initial sum for the first window
+	for i := 0; i < windowSize; i++ {
+		sum += data[i]
+	}
+	result = append(result, sum/float64(windowSize))
+
+	// Slide the window and update the sum
+	for i := windowSize; i < len(data); i++ {
+		sum = sum - data[i-windowSize] + data[i]
+		result = append(result, sum/float64(windowSize))
+	}
+
+	return result
 }
 
-var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
-
-func ValidateUserData(data UserData) error {
-	if strings.TrimSpace(data.Email) == "" {
-		return errors.New("email cannot be empty")
-	}
-	if !emailRegex.MatchString(data.Email) {
-		return errors.New("invalid email format")
-	}
-	if len(strings.TrimSpace(data.Username)) < 3 {
-		return errors.New("username must be at least 3 characters")
-	}
-	if data.Age < 18 || data.Age > 120 {
-		return errors.New("age must be between 18 and 120")
-	}
-	return nil
-}
-
-func TransformUsername(username string) string {
-	return strings.ToLower(strings.TrimSpace(username))
-}
-
-func ProcessUserInput(email, username string, age int) (UserData, error) {
-	transformedUsername := TransformUsername(username)
-	userData := UserData{
-		Email:    strings.TrimSpace(email),
-		Username: transformedUsername,
-		Age:      age,
-	}
-	err := ValidateUserData(userData)
-	if err != nil {
-		return UserData{}, err
-	}
-	return userData, nil
+func main() {
+	// Example usage
+	data := []float64{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0}
+	window := 3
+	averages := CalculateMovingAverage(data, window)
+	fmt.Printf("Data: %v\n", data)
+	fmt.Printf("Moving Average (window=%d): %v\n", window, averages)
 }
