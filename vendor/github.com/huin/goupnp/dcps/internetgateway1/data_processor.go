@@ -151,4 +151,94 @@ func ValidateRecords(records []DataRecord) []error {
 	}
 
 	return errors
+}package main
+
+import (
+	"encoding/csv"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+)
+
+type Record struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Value   int    `json:"value"`
+	Active  bool   `json:"active"`
+}
+
+func processCSVData(reader io.Reader) ([]Record, error) {
+	csvReader := csv.NewReader(reader)
+	records := []Record{}
+
+	headers, err := csvReader.Read()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read headers: %w", err)
+	}
+
+	headerMap := make(map[string]int)
+	for i, header := range headers {
+		headerMap[strings.ToLower(strings.TrimSpace(header))] = i
+	}
+
+	for {
+		row, err := csvReader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to read row: %w", err)
+		}
+
+		record := Record{
+			ID:     getField(row, headerMap, "id"),
+			Name:   getField(row, headerMap, "name"),
+			Active: strings.ToLower(getField(row, headerMap, "active")) == "true",
+		}
+
+		fmt.Sscanf(getField(row, headerMap, "value"), "%d", &record.Value)
+		records = append(records, record)
+	}
+
+	return records, nil
+}
+
+func getField(row []string, headerMap map[string]int, key string) string {
+	if idx, exists := headerMap[key]; exists && idx < len(row) {
+		return strings.TrimSpace(row[idx])
+	}
+	return ""
+}
+
+func generateJSONOutput(records []Record) (string, error) {
+	jsonData, err := json.MarshalIndent(records, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal JSON: %w", err)
+	}
+	return string(jsonData), nil
+}
+
+func main() {
+	csvData := `id,name,value,active
+1,alpha,100,true
+2,beta,200,false
+3,gamma,300,true`
+
+	reader := strings.NewReader(csvData)
+	records, err := processCSVData(reader)
+	if err != nil {
+		fmt.Printf("Error processing data: %v\n", err)
+		os.Exit(1)
+	}
+
+	jsonOutput, err := generateJSONOutput(records)
+	if err != nil {
+		fmt.Printf("Error generating output: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Processed Data:")
+	fmt.Println(jsonOutput)
 }
