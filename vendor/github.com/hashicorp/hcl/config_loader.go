@@ -85,4 +85,69 @@ func overrideBool(field *bool, envVar string) {
     if val := os.Getenv(envVar); val != "" {
         *field = val == "true" || val == "1" || val == "yes"
     }
+}package config
+
+import (
+	"encoding/json"
+	"os"
+	"sync"
+)
+
+type Config struct {
+	ServerPort string `json:"server_port"`
+	DBHost     string `json:"db_host"`
+	DBPort     string `json:"db_port"`
+	DebugMode  bool   `json:"debug_mode"`
+}
+
+var (
+	config     *Config
+	configOnce sync.Once
+)
+
+func Load() *Config {
+	configOnce.Do(func() {
+		config = &Config{
+			ServerPort: getEnv("SERVER_PORT", "8080"),
+			DBHost:     getEnv("DB_HOST", "localhost"),
+			DBPort:     getEnv("DB_PORT", "5432"),
+			DebugMode:  getEnv("DEBUG", "false") == "true",
+		}
+
+		configFile := os.Getenv("CONFIG_FILE")
+		if configFile != "" {
+			loadFromFile(configFile, config)
+		}
+	})
+	return config
+}
+
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+func loadFromFile(filename string, cfg *Config) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return
+	}
+
+	var fileConfig Config
+	if err := json.Unmarshal(data, &fileConfig); err != nil {
+		return
+	}
+
+	if fileConfig.ServerPort != "" {
+		cfg.ServerPort = fileConfig.ServerPort
+	}
+	if fileConfig.DBHost != "" {
+		cfg.DBHost = fileConfig.DBHost
+	}
+	if fileConfig.DBPort != "" {
+		cfg.DBPort = fileConfig.DBPort
+	}
+	cfg.DebugMode = cfg.DebugMode || fileConfig.DebugMode
 }
