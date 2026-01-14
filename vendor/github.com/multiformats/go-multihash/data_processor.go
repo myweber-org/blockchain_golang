@@ -1,77 +1,106 @@
 package main
 
 import (
-	"encoding/json"
-	"errors"
+	"encoding/csv"
 	"fmt"
-	"regexp"
+	"io"
+	"os"
 	"strings"
 )
 
-type UserProfile struct {
-	ID        int    `json:"id"`
-	Username  string `json:"username"`
-	Email     string `json:"email"`
-	Age       int    `json:"age"`
-	Active    bool   `json:"active"`
+type DataProcessor struct {
+	InputPath  string
+	OutputPath string
 }
 
-func ValidateUserProfile(profile UserProfile) error {
-	if profile.ID <= 0 {
-		return errors.New("invalid user ID")
+func NewDataProcessor(input, output string) *DataProcessor {
+	return &DataProcessor{
+		InputPath:  input,
+		OutputPath: output,
+	}
+}
+
+func (dp *DataProcessor) Process() error {
+	inputFile, err := os.Open(dp.InputPath)
+	if err != nil {
+		return fmt.Errorf("failed to open input file: %w", err)
+	}
+	defer inputFile.Close()
+
+	outputFile, err := os.Create(dp.OutputPath)
+	if err != nil {
+		return fmt.Errorf("failed to create output file: %w", err)
+	}
+	defer outputFile.Close()
+
+	reader := csv.NewReader(inputFile)
+	writer := csv.NewWriter(outputFile)
+	defer writer.Flush()
+
+	headers, err := reader.Read()
+	if err != nil {
+		return fmt.Errorf("failed to read headers: %w", err)
 	}
 
-	if len(profile.Username) < 3 || len(profile.Username) > 20 {
-		return errors.New("username must be between 3 and 20 characters")
+	if err := writer.Write(headers); err != nil {
+		return fmt.Errorf("failed to write headers: %w", err)
 	}
 
-	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
-	if !emailRegex.MatchString(profile.Email) {
-		return errors.New("invalid email format")
+	recordCount := 0
+	cleanedCount := 0
+
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			continue
+		}
+
+		recordCount++
+		cleanedRecord := dp.cleanRecord(record)
+
+		if dp.isValidRecord(cleanedRecord) {
+			if err := writer.Write(cleanedRecord); err != nil {
+				return fmt.Errorf("failed to write record: %w", err)
+			}
+			cleanedCount++
+		}
 	}
 
-	if profile.Age < 0 || profile.Age > 120 {
-		return errors.New("age must be between 0 and 120")
-	}
-
+	fmt.Printf("Processed %d records, cleaned %d records\n", recordCount, cleanedCount)
 	return nil
 }
 
-func TransformUsername(profile *UserProfile) {
-	profile.Username = strings.ToLower(strings.TrimSpace(profile.Username))
+func (dp *DataProcessor) cleanRecord(record []string) []string {
+	cleaned := make([]string, len(record))
+	for i, field := range record {
+		cleaned[i] = strings.TrimSpace(field)
+	}
+	return cleaned
 }
 
-func ProcessUserData(jsonData []byte) (*UserProfile, error) {
-	var profile UserProfile
-	err := json.Unmarshal(jsonData, &profile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %v", err)
+func (dp *DataProcessor) isValidRecord(record []string) bool {
+	for _, field := range record {
+		if field == "" {
+			return false
+		}
 	}
-
-	TransformUsername(&profile)
-
-	err = ValidateUserProfile(profile)
-	if err != nil {
-		return nil, fmt.Errorf("validation failed: %v", err)
-	}
-
-	return &profile, nil
+	return true
 }
 
 func main() {
-	sampleData := `{
-		"id": 123,
-		"username": "  JohnDoe  ",
-		"email": "john@example.com",
-		"age": 30,
-		"active": true
-	}`
-
-	profile, err := ProcessUserData([]byte(sampleData))
-	if err != nil {
-		fmt.Printf("Error: %v\n", err)
-		return
+	if len(os.Args) != 3 {
+		fmt.Println("Usage: data_processor <input.csv> <output.csv>")
+		os.Exit(1)
 	}
 
-	fmt.Printf("Processed user profile: %+v\n", profile)
+	processor := NewDataProcessor(os.Args[1], os.Args[2])
+	if err := processor.Process(); err != nil {
+		fmt.Printf("Error processing data: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Data processing completed successfully")
 }
