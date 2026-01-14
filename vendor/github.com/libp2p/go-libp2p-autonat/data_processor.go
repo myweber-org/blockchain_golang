@@ -2,51 +2,51 @@
 package main
 
 import (
-	"regexp"
-	"strings"
+    "errors"
+    "strings"
+    "unicode"
 )
 
-type DataProcessor struct {
-	whitespaceRegex *regexp.Regexp
+type UserProfile struct {
+    Username string
+    Email    string
+    Age      int
 }
 
-func NewDataProcessor() *DataProcessor {
-	return &DataProcessor{
-		whitespaceRegex: regexp.MustCompile(`\s+`),
-	}
+func ValidateProfile(p UserProfile) error {
+    if strings.TrimSpace(p.Username) == "" {
+        return errors.New("username cannot be empty")
+    }
+    if len(p.Username) < 3 || len(p.Username) > 20 {
+        return errors.New("username must be between 3 and 20 characters")
+    }
+    for _, r := range p.Username {
+        if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' {
+            return errors.New("username can only contain letters, digits, and underscores")
+        }
+    }
+
+    if !strings.Contains(p.Email, "@") {
+        return errors.New("invalid email format")
+    }
+
+    if p.Age < 0 || p.Age > 150 {
+        return errors.New("age must be between 0 and 150")
+    }
+
+    return nil
 }
 
-func (dp *DataProcessor) CleanInput(input string) string {
-	trimmed := strings.TrimSpace(input)
-	normalized := dp.whitespaceRegex.ReplaceAllString(trimmed, " ")
-	return normalized
+func NormalizeProfile(p *UserProfile) {
+    p.Username = strings.ToLower(strings.TrimSpace(p.Username))
+    p.Email = strings.ToLower(strings.TrimSpace(p.Email))
 }
 
-func (dp *DataProcessor) NormalizeCase(input string, toUpper bool) string {
-	cleaned := dp.CleanInput(input)
-	if toUpper {
-		return strings.ToUpper(cleaned)
-	}
-	return strings.ToLower(cleaned)
-}
+func ProcessUserProfile(p UserProfile) (UserProfile, error) {
+    if err := ValidateProfile(p); err != nil {
+        return UserProfile{}, err
+    }
 
-func (dp *DataProcessor) ExtractAlphanumeric(input string) string {
-	alnumRegex := regexp.MustCompile(`[^a-zA-Z0-9]+`)
-	cleaned := dp.CleanInput(input)
-	return alnumRegex.ReplaceAllString(cleaned, "")
-}
-
-func main() {
-	processor := NewDataProcessor()
-	
-	sample := "  Hello   World! 123  "
-	
-	cleaned := processor.CleanInput(sample)
-	println("Cleaned:", cleaned)
-	
-	upper := processor.NormalizeCase(sample, true)
-	println("Uppercase:", upper)
-	
-	alnum := processor.ExtractAlphanumeric(sample)
-	println("Alphanumeric only:", alnum)
+    NormalizeProfile(&p)
+    return p, nil
 }
