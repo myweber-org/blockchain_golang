@@ -1,4 +1,3 @@
-
 package main
 
 import (
@@ -6,80 +5,94 @@ import (
 	"strings"
 )
 
-type DataRecord struct {
-	ID    int
-	Email string
-	Name  string
-}
-
 type DataCleaner struct {
-	records []DataRecord
+	normalizeCase bool
+	trimSpaces    bool
 }
 
-func NewDataCleaner() *DataCleaner {
-	return &DataCleaner{
-		records: make([]DataRecord, 0),
+func NewDataCleaner(options ...func(*DataCleaner)) *DataCleaner {
+	dc := &DataCleaner{
+		normalizeCase: true,
+		trimSpaces:    true,
+	}
+	for _, option := range options {
+		option(dc)
+	}
+	return dc
+}
+
+func WithCaseNormalization(enabled bool) func(*DataCleaner) {
+	return func(dc *DataCleaner) {
+		dc.normalizeCase = enabled
 	}
 }
 
-func (dc *DataCleaner) AddRecord(id int, email, name string) {
-	record := DataRecord{
-		ID:    id,
-		Email: strings.ToLower(strings.TrimSpace(email)),
-		Name:  strings.TrimSpace(name),
+func WithSpaceTrimming(enabled bool) func(*DataCleaner) {
+	return func(dc *DataCleaner) {
+		dc.trimSpaces = enabled
 	}
-	dc.records = append(dc.records, record)
 }
 
-func (dc *DataCleaner) RemoveDuplicates() []DataRecord {
-	seen := make(map[string]bool)
-	unique := make([]DataRecord, 0)
+func (dc *DataCleaner) CleanString(input string) string {
+	result := input
 
-	for _, record := range dc.records {
-		key := fmt.Sprintf("%s|%s", record.Email, record.Name)
-		if !seen[key] {
-			seen[key] = true
-			unique = append(unique, record)
+	if dc.trimSpaces {
+		result = strings.TrimSpace(result)
+	}
+
+	if dc.normalizeCase {
+		result = strings.ToLower(result)
+	}
+
+	return result
+}
+
+func (dc *DataCleaner) DeduplicateStrings(items []string) []string {
+	seen := make(map[string]struct{})
+	var unique []string
+
+	for _, item := range items {
+		cleaned := dc.CleanString(item)
+		if _, exists := seen[cleaned]; !exists {
+			seen[cleaned] = struct{}{}
+			unique = append(unique, cleaned)
 		}
 	}
-
-	dc.records = unique
 	return unique
 }
 
-func (dc *DataCleaner) ValidateEmails() (valid, invalid []DataRecord) {
-	for _, record := range dc.records {
-		if strings.Contains(record.Email, "@") && strings.Contains(record.Email, ".") {
-			valid = append(valid, record)
-		} else {
-			invalid = append(invalid, record)
-		}
+func NormalizeEmail(email string) string {
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		return email
 	}
-	return valid, invalid
-}
-
-func (dc *DataCleaner) GetRecordCount() int {
-	return len(dc.records)
+	localPart := strings.Split(parts[0], "+")[0]
+	localPart = strings.ReplaceAll(localPart, ".", "")
+	return strings.ToLower(localPart + "@" + parts[1])
 }
 
 func main() {
 	cleaner := NewDataCleaner()
-	
-	cleaner.AddRecord(1, "user@example.com", "John Doe")
-	cleaner.AddRecord(2, "user@example.com", "John Doe")
-	cleaner.AddRecord(3, "jane@test.org", "Jane Smith")
-	cleaner.AddRecord(4, "invalid-email", "Bad Data")
-	cleaner.AddRecord(5, "another@demo.net", "Another User")
-	
-	fmt.Printf("Initial records: %d\n", cleaner.GetRecordCount())
-	
-	unique := cleaner.RemoveDuplicates()
-	fmt.Printf("After deduplication: %d\n", len(unique))
-	
-	valid, invalid := cleaner.ValidateEmails()
-	fmt.Printf("Valid emails: %d, Invalid emails: %d\n", len(valid), len(invalid))
-	
-	for _, record := range valid {
-		fmt.Printf("Valid: ID=%d, Email=%s, Name=%s\n", record.ID, record.Email, record.Name)
+
+	data := []string{
+		"  Apple  ",
+		"apple",
+		"APPLE",
+		"Banana",
+		"  banana ",
+	}
+
+	cleaned := cleaner.DeduplicateStrings(data)
+	fmt.Println("Deduplicated data:", cleaned)
+
+	emails := []string{
+		"John.Doe+test@example.com",
+		"johndoe@EXAMPLE.COM",
+		"john.doe@example.com",
+	}
+
+	fmt.Println("Normalized emails:")
+	for _, email := range emails {
+		fmt.Println(NormalizeEmail(email))
 	}
 }
