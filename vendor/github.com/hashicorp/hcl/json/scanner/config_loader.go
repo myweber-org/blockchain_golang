@@ -1,99 +1,79 @@
 package config
 
 import (
-    "fmt"
-    "os"
-    "path/filepath"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 
-    "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
-type DatabaseConfig struct {
-    Host     string `yaml:"host" env:"DB_HOST"`
-    Port     int    `yaml:"port" env:"DB_PORT"`
-    Username string `yaml:"username" env:"DB_USER"`
-    Password string `yaml:"password" env:"DB_PASS"`
-    Name     string `yaml:"name" env:"DB_NAME"`
+type Config struct {
+	Server struct {
+		Host string `yaml:"host" env:"SERVER_HOST"`
+		Port int    `yaml:"port" env:"SERVER_PORT"`
+	} `yaml:"server"`
+	Database struct {
+		Host     string `yaml:"host" env:"DB_HOST"`
+		Port     int    `yaml:"port" env:"DB_PORT"`
+		Username string `yaml:"username" env:"DB_USER"`
+		Password string `yaml:"password" env:"DB_PASS"`
+		Name     string `yaml:"name" env:"DB_NAME"`
+	} `yaml:"database"`
+	Logging struct {
+		Level  string `yaml:"level" env:"LOG_LEVEL"`
+		Output string `yaml:"output" env:"LOG_OUTPUT"`
+	} `yaml:"logging"`
 }
 
-type ServerConfig struct {
-    Port         int    `yaml:"port" env:"SERVER_PORT"`
-    ReadTimeout  int    `yaml:"read_timeout" env:"READ_TIMEOUT"`
-    WriteTimeout int    `yaml:"write_timeout" env:"WRITE_TIMEOUT"`
-    DebugMode    bool   `yaml:"debug_mode" env:"DEBUG_MODE"`
+func LoadConfig(configPath string) (*Config, error) {
+	absPath, err := filepath.Abs(configPath)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := ioutil.ReadFile(absPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var config Config
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, err
+	}
+
+	config.overrideFromEnv()
+
+	return &config, nil
 }
 
-type AppConfig struct {
-    Database DatabaseConfig `yaml:"database"`
-    Server   ServerConfig   `yaml:"server"`
-    LogLevel string         `yaml:"log_level" env:"LOG_LEVEL"`
+func (c *Config) overrideFromEnv() {
+	c.Server.Host = getEnvOrDefault("SERVER_HOST", c.Server.Host)
+	c.Server.Port = getEnvIntOrDefault("SERVER_PORT", c.Server.Port)
+	
+	c.Database.Host = getEnvOrDefault("DB_HOST", c.Database.Host)
+	c.Database.Port = getEnvIntOrDefault("DB_PORT", c.Database.Port)
+	c.Database.Username = getEnvOrDefault("DB_USER", c.Database.Username)
+	c.Database.Password = getEnvOrDefault("DB_PASS", c.Database.Password)
+	c.Database.Name = getEnvOrDefault("DB_NAME", c.Database.Name)
+	
+	c.Logging.Level = getEnvOrDefault("LOG_LEVEL", c.Logging.Level)
+	c.Logging.Output = getEnvOrDefault("LOG_OUTPUT", c.Logging.Output)
 }
 
-func LoadConfig(configPath string) (*AppConfig, error) {
-    data, err := os.ReadFile(configPath)
-    if err != nil {
-        return nil, fmt.Errorf("failed to read config file: %w", err)
-    }
-
-    var config AppConfig
-    if err := yaml.Unmarshal(data, &config); err != nil {
-        return nil, fmt.Errorf("failed to parse YAML: %w", err)
-    }
-
-    overrideFromEnv(&config)
-    return &config, nil
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
 
-func overrideFromEnv(config *AppConfig) {
-    setFromEnv(&config.Database.Host, "DB_HOST")
-    setFromEnvInt(&config.Database.Port, "DB_PORT")
-    setFromEnv(&config.Database.Username, "DB_USER")
-    setFromEnv(&config.Database.Password, "DB_PASS")
-    setFromEnv(&config.Database.Name, "DB_NAME")
-    
-    setFromEnvInt(&config.Server.Port, "SERVER_PORT")
-    setFromEnvInt(&config.Server.ReadTimeout, "READ_TIMEOUT")
-    setFromEnvInt(&config.Server.WriteTimeout, "WRITE_TIMEOUT")
-    setFromEnvBool(&config.Server.DebugMode, "DEBUG_MODE")
-    
-    setFromEnv(&config.LogLevel, "LOG_LEVEL")
-}
-
-func setFromEnv(field *string, envVar string) {
-    if val := os.Getenv(envVar); val != "" {
-        *field = val
-    }
-}
-
-func setFromEnvInt(field *int, envVar string) {
-    if val := os.Getenv(envVar); val != "" {
-        var intVal int
-        if _, err := fmt.Sscanf(val, "%d", &intVal); err == nil {
-            *field = intVal
-        }
-    }
-}
-
-func setFromEnvBool(field *bool, envVar string) {
-    if val := os.Getenv(envVar); val != "" {
-        *field = val == "true" || val == "1" || val == "yes"
-    }
-}
-
-func DefaultConfigPath() string {
-    paths := []string{
-        "config.yaml",
-        "config.yml",
-        filepath.Join("config", "config.yaml"),
-        filepath.Join("config", "config.yml"),
-        filepath.Join("..", "config", "config.yaml"),
-    }
-    
-    for _, path := range paths {
-        if _, err := os.Stat(path); err == nil {
-            return path
-        }
-    }
-    
-    return "config.yaml"
+func getEnvIntOrDefault(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		var result int
+		if _, err := fmt.Sscanf(value, "%d", &result); err == nil {
+			return result
+		}
+	}
+	return defaultValue
 }
