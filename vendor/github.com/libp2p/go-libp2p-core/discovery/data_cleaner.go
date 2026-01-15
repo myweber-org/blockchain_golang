@@ -120,4 +120,77 @@ func main() {
 	testValue := "Test"
 	fmt.Printf("Is '%s' duplicate? %v\n", testValue, cleaner.IsDuplicate(testValue))
 	fmt.Printf("Is '%s' duplicate again? %v\n", testValue, cleaner.IsDuplicate(testValue))
+}package main
+
+import (
+    "encoding/csv"
+    "fmt"
+    "io"
+    "os"
+    "strings"
+)
+
+func cleanCSVData(inputPath, outputPath string) error {
+    inputFile, err := os.Open(inputPath)
+    if err != nil {
+        return fmt.Errorf("failed to open input file: %w", err)
+    }
+    defer inputFile.Close()
+
+    outputFile, err := os.Create(outputPath)
+    if err != nil {
+        return fmt.Errorf("failed to create output file: %w", err)
+    }
+    defer outputFile.Close()
+
+    reader := csv.NewReader(inputFile)
+    writer := csv.NewWriter(outputFile)
+    defer writer.Flush()
+
+    header, err := reader.Read()
+    if err != nil {
+        return fmt.Errorf("failed to read header: %w", err)
+    }
+
+    if err := writer.Write(header); err != nil {
+        return fmt.Errorf("failed to write header: %w", err)
+    }
+
+    for {
+        record, err := reader.Read()
+        if err == io.EOF {
+            break
+        }
+        if err != nil {
+            return fmt.Errorf("failed to read record: %w", err)
+        }
+
+        cleaned := make([]string, len(record))
+        for i, field := range record {
+            cleaned[i] = strings.TrimSpace(field)
+            if cleaned[i] == "" {
+                cleaned[i] = "N/A"
+            }
+        }
+
+        if err := writer.Write(cleaned); err != nil {
+            return fmt.Errorf("failed to write cleaned record: %w", err)
+        }
+    }
+
+    return nil
+}
+
+func main() {
+    if len(os.Args) != 3 {
+        fmt.Println("Usage: data_cleaner <input.csv> <output.csv>")
+        os.Exit(1)
+    }
+
+    if err := cleanCSVData(os.Args[1], os.Args[2]); err != nil {
+        fmt.Printf("Error: %v\n", err)
+        os.Exit(1)
+    }
+
+    fmt.Println("Data cleaning completed successfully")
 }
