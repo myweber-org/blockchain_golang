@@ -1,120 +1,61 @@
+
 package main
 
 import (
-	"encoding/csv"
-	"encoding/json"
-	"fmt"
-	"io"
-	"os"
-	"strconv"
+	"errors"
+	"regexp"
+	"strings"
 )
 
-type Record struct {
-	Name  string  `json:"name"`
-	Value float64 `json:"value"`
-	Count int     `json:"count"`
+type DataRecord struct {
+	ID    string
+	Email string
+	Score int
 }
 
-func processCSVData(filename string) ([]Record, error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return nil, err
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+
+func ValidateRecord(record DataRecord) error {
+	if record.ID == "" {
+		return errors.New("ID cannot be empty")
 	}
-	defer file.Close()
-
-	reader := csv.NewReader(file)
-	records := []Record{}
-	lineNum := 0
-
-	for {
-		row, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		lineNum++
-		if lineNum == 1 {
-			continue
-		}
-
-		if len(row) < 3 {
-			continue
-		}
-
-		value, err := strconv.ParseFloat(row[1], 64)
-		if err != nil {
-			continue
-		}
-
-		count, err := strconv.Atoi(row[2])
-		if err != nil {
-			continue
-		}
-
-		records = append(records, Record{
-			Name:  row[0],
-			Value: value,
-			Count: count,
-		})
+	if !emailRegex.MatchString(record.Email) {
+		return errors.New("invalid email format")
 	}
-
-	return records, nil
+	if record.Score < 0 || record.Score > 100 {
+		return errors.New("score must be between 0 and 100")
+	}
+	return nil
 }
 
-func generateJSONReport(records []Record) (string, error) {
-	report := struct {
-		TotalRecords int       `json:"total_records"`
-		AverageValue float64   `json:"average_value"`
-		MaxCount     int       `json:"max_count"`
-		Records      []Record  `json:"records"`
-	}{
-		TotalRecords: len(records),
-		Records:      records,
-	}
-
-	if len(records) > 0 {
-		var totalValue float64
-		maxCount := 0
-
-		for _, r := range records {
-			totalValue += r.Value
-			if r.Count > maxCount {
-				maxCount = r.Count
-			}
-		}
-
-		report.AverageValue = totalValue / float64(len(records))
-		report.MaxCount = maxCount
-	}
-
-	data, err := json.MarshalIndent(report, "", "  ")
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
+func NormalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
 }
 
-func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: data_processor <csv_file>")
-		os.Exit(1)
+func ProcessRecords(records []DataRecord) ([]DataRecord, []error) {
+	var processed []DataRecord
+	var errs []error
+
+	for i, record := range records {
+		record.Email = NormalizeEmail(record.Email)
+		if err := ValidateRecord(record); err != nil {
+			errs = append(errs, errors.New("record "+record.ID+": "+err.Error()))
+			continue
+		}
+		processed = append(processed, record)
+		_ = i
 	}
 
-	records, err := processCSVData(os.Args[1])
-	if err != nil {
-		fmt.Printf("Error processing file: %v\n", err)
-		os.Exit(1)
-	}
+	return processed, errs
+}
 
-	jsonReport, err := generateJSONReport(records)
-	if err != nil {
-		fmt.Printf("Error generating report: %v\n", err)
-		os.Exit(1)
+func CalculateAverage(records []DataRecord) float64 {
+	if len(records) == 0 {
+		return 0.0
 	}
-
-	fmt.Println(jsonReport)
+	var sum int
+	for _, record := range records {
+		sum += record.Score
+	}
+	return float64(sum) / float64(len(records))
 }
