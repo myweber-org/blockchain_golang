@@ -126,4 +126,56 @@ func GetUserID(ctx context.Context) string {
 		return userID
 	}
 	return ""
+}package middleware
+
+import (
+    "net/http"
+    "strings"
+)
+
+type Authenticator struct {
+    secretKey []byte
+}
+
+func NewAuthenticator(secretKey string) *Authenticator {
+    return &Authenticator{secretKey: []byte(secretKey)}
+}
+
+func (a *Authenticator) ValidateToken(tokenString string) (bool, error) {
+    if tokenString == "" {
+        return false, nil
+    }
+    
+    // In production, implement proper JWT validation here
+    // For now, check if token starts with "valid_"
+    return strings.HasPrefix(tokenString, "valid_"), nil
+}
+
+func (a *Authenticator) Middleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        authHeader := r.Header.Get("Authorization")
+        if authHeader == "" {
+            http.Error(w, "Authorization header required", http.StatusUnauthorized)
+            return
+        }
+        
+        tokenParts := strings.Split(authHeader, " ")
+        if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
+            http.Error(w, "Invalid authorization format", http.StatusUnauthorized)
+            return
+        }
+        
+        isValid, err := a.ValidateToken(tokenParts[1])
+        if err != nil {
+            http.Error(w, "Token validation error", http.StatusInternalServerError)
+            return
+        }
+        
+        if !isValid {
+            http.Error(w, "Invalid token", http.StatusUnauthorized)
+            return
+        }
+        
+        next.ServeHTTP(w, r)
+    })
 }
