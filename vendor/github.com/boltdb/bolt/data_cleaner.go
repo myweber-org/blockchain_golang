@@ -1,15 +1,28 @@
-package utils
+package main
 
-import (
-	"regexp"
-	"strings"
-)
+import "fmt"
 
-// SanitizeInput removes excessive whitespace and trims leading/trailing spaces from a string.
-func SanitizeInput(input string) string {
-	// Replace multiple spaces, tabs, and newlines with a single space
-	re := regexp.MustCompile(`\s+`)
-	cleaned := re.ReplaceAllString(input, " ")
-	// Trim spaces from both ends
-	return strings.TrimSpace(cleaned)
+func RemoveDuplicates[T comparable](slice []T) []T {
+	seen := make(map[T]bool)
+	result := []T{}
+
+	for _, item := range slice {
+		if !seen[item] {
+			seen[item] = true
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+func main() {
+	numbers := []int{1, 2, 2, 3, 4, 4, 5}
+	uniqueNumbers := RemoveDuplicates(numbers)
+	fmt.Println("Original:", numbers)
+	fmt.Println("Unique:", uniqueNumbers)
+
+	strings := []string{"apple", "banana", "apple", "orange"}
+	uniqueStrings := RemoveDuplicates(strings)
+	fmt.Println("Original:", strings)
+	fmt.Println("Unique:", uniqueStrings)
 }
