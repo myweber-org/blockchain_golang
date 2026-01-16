@@ -1,44 +1,57 @@
 package auth
 
 import (
-    "net/http"
-    "strings"
+    "errors"
+    "time"
+
     "github.com/golang-jwt/jwt/v5"
 )
 
+var secretKey = []byte("your-secret-key-change-in-production")
+
 type Claims struct {
-    Username string `json:"username"`
-    Role     string `json:"role"`
+    UserID string `json:"user_id"`
+    Email  string `json:"email"`
     jwt.RegisteredClaims
 }
 
-func Authenticate(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        authHeader := r.Header.Get("Authorization")
-        if authHeader == "" {
-            http.Error(w, "Authorization header required", http.StatusUnauthorized)
-            return
-        }
+func GenerateToken(userID, email string) (string, error) {
+    expirationTime := time.Now().Add(24 * time.Hour)
+    
+    claims := &Claims{
+        UserID: userID,
+        Email:  email,
+        RegisteredClaims: jwt.RegisteredClaims{
+            ExpiresAt: jwt.NewNumericDate(expirationTime),
+            IssuedAt:  jwt.NewNumericDate(time.Now()),
+            Issuer:    "myapp",
+        },
+    }
 
-        parts := strings.Split(authHeader, " ")
-        if len(parts) != 2 || parts[0] != "Bearer" {
-            http.Error(w, "Invalid authorization format", http.StatusUnauthorized)
-            return
-        }
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    return token.SignedString(secretKey)
+}
 
-        tokenStr := parts[1]
-        claims := &Claims{}
-        token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
-            return []byte("your-secret-key"), nil
-        })
-
-        if err != nil || !token.Valid {
-            http.Error(w, "Invalid token", http.StatusUnauthorized)
-            return
-        }
-
-        r.Header.Set("X-Username", claims.Username)
-        r.Header.Set("X-Role", claims.Role)
-        next.ServeHTTP(w, r)
+func ValidateToken(tokenString string) (*Claims, error) {
+    token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+        return secretKey, nil
     })
+
+    if err != nil {
+        return nil, err
+    }
+
+    if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+        return claims, nil
+    }
+
+    return nil, errors.New("invalid token")
+}
+
+func ExtractUserID(tokenString string) (string, error) {
+    claims, err := ValidateToken(tokenString)
+    if err != nil {
+        return "", err
+    }
+    return claims.UserID, nil
 }
