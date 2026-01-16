@@ -1,23 +1,70 @@
+
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
-func RemoveDuplicates(input []string) []string {
-	seen := make(map[string]bool)
-	result := []string{}
+type DataCleaner struct {
+	processedRecords map[string]bool
+}
 
-	for _, value := range input {
-		if !seen[value] {
-			seen[value] = true
-			result = append(result, value)
+func NewDataCleaner() *DataCleaner {
+	return &DataCleaner{
+		processedRecords: make(map[string]bool),
+	}
+}
+
+func (dc *DataCleaner) RemoveDuplicates(records []string) []string {
+	var unique []string
+	for _, record := range records {
+		normalized := strings.ToLower(strings.TrimSpace(record))
+		if !dc.processedRecords[normalized] {
+			dc.processedRecords[normalized] = true
+			unique = append(unique, record)
 		}
 	}
-	return result
+	return unique
+}
+
+func (dc *DataCleaner) ValidateEmail(email string) bool {
+	if len(email) < 3 || !strings.Contains(email, "@") {
+		return false
+	}
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 || len(parts[0]) == 0 || len(parts[1]) == 0 {
+		return false
+	}
+	return strings.Contains(parts[1], ".")
+}
+
+func (dc *DataCleaner) CleanPhoneNumber(phone string) string {
+	var builder strings.Builder
+	for _, ch := range phone {
+		if ch >= '0' && ch <= '9' {
+			builder.WriteRune(ch)
+		}
+	}
+	return builder.String()
 }
 
 func main() {
-	data := []string{"apple", "banana", "apple", "orange", "banana", "grape"}
-	cleaned := RemoveDuplicates(data)
-	fmt.Println("Original:", data)
-	fmt.Println("Cleaned:", cleaned)
+	cleaner := NewDataCleaner()
+
+	// Test deduplication
+	records := []string{"John Doe", "john doe", "Jane Smith", "JOHN DOE"}
+	unique := cleaner.RemoveDuplicates(records)
+	fmt.Printf("Unique records: %v\n", unique)
+
+	// Test email validation
+	emails := []string{"test@example.com", "invalid", "user@domain"}
+	for _, email := range emails {
+		fmt.Printf("Email %s valid: %v\n", email, cleaner.ValidateEmail(email))
+	}
+
+	// Test phone cleaning
+	phone := "+1 (555) 123-4567"
+	cleaned := cleaner.CleanPhoneNumber(phone)
+	fmt.Printf("Cleaned phone: %s\n", cleaned)
 }
