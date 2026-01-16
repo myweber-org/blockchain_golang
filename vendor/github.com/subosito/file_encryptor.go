@@ -94,4 +94,105 @@ func main() {
 		return
 	}
 	fmt.Println("File decrypted successfully")
+}package main
+
+import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"os"
+)
+
+func encryptFile(inputPath, outputPath, key string) error {
+	plaintext, err := os.ReadFile(inputPath)
+	if err != nil {
+		return fmt.Errorf("read file error: %v", err)
+	}
+
+	block, err := aes.NewCipher([]byte(key))
+	if err != nil {
+		return fmt.Errorf("cipher creation error: %v", err)
+	}
+
+	ciphertext := make([]byte, aes.BlockSize+len(plaintext))
+	iv := ciphertext[:aes.BlockSize]
+	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+		return fmt.Errorf("iv generation error: %v", err)
+	}
+
+	stream := cipher.NewCFBEncrypter(block, iv)
+	stream.XORKeyStream(ciphertext[aes.BlockSize:], plaintext)
+
+	if err := os.WriteFile(outputPath, ciphertext, 0644); err != nil {
+		return fmt.Errorf("write file error: %v", err)
+	}
+
+	fmt.Printf("Encryption successful. IV: %s\n", hex.EncodeToString(iv))
+	return nil
+}
+
+func decryptFile(inputPath, outputPath, key string) error {
+	ciphertext, err := os.ReadFile(inputPath)
+	if err != nil {
+		return fmt.Errorf("read file error: %v", err)
+	}
+
+	block, err := aes.NewCipher([]byte(key))
+	if err != nil {
+		return fmt.Errorf("cipher creation error: %v", err)
+	}
+
+	if len(ciphertext) < aes.BlockSize {
+		return fmt.Errorf("ciphertext too short")
+	}
+
+	iv := ciphertext[:aes.BlockSize]
+	ciphertext = ciphertext[aes.BlockSize:]
+
+	stream := cipher.NewCFBDecrypter(block, iv)
+	stream.XORKeyStream(ciphertext, ciphertext)
+
+	if err := os.WriteFile(outputPath, ciphertext, 0644); err != nil {
+		return fmt.Errorf("write file error: %v", err)
+	}
+
+	return nil
+}
+
+func main() {
+	if len(os.Args) < 5 {
+		fmt.Println("Usage: go run file_encryptor.go <encrypt|decrypt> <input> <output> <key>")
+		os.Exit(1)
+	}
+
+	mode := os.Args[1]
+	input := os.Args[2]
+	output := os.Args[3]
+	key := os.Args[4]
+
+	if len(key) != 32 {
+		fmt.Println("Key must be 32 bytes for AES-256")
+		os.Exit(1)
+	}
+
+	var err error
+	switch mode {
+	case "encrypt":
+		err = encryptFile(input, output, key)
+	case "decrypt":
+		err = decryptFile(input, output, key)
+	default:
+		fmt.Println("Invalid mode. Use 'encrypt' or 'decrypt'")
+		os.Exit(1)
+	}
+
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Operation completed successfully")
 }
