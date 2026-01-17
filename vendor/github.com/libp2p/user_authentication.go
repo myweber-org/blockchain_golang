@@ -10,10 +10,10 @@ import (
 
 type contextKey string
 
-const userIDKey contextKey = "userID"
+const UserIDKey contextKey = "userID"
 
 type Claims struct {
-	UserID string `json:"user_id"`
+	UserID string `json:"userID"`
 	jwt.RegisteredClaims
 }
 
@@ -40,19 +40,12 @@ func AuthMiddleware(secretKey string) func(http.Handler) http.Handler {
 			})
 
 			if err != nil || !token.Valid {
-				http.Error(w, "Invalid token", http.StatusUnauthorized)
+				http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), userIDKey, claims.UserID)
+			ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
-}
-
-func GetUserID(ctx context.Context) string {
-	if userID, ok := ctx.Value(userIDKey).(string); ok {
-		return userID
-	}
-	return ""
 }
