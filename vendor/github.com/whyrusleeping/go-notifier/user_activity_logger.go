@@ -16,23 +16,21 @@ func NewActivityLogger(handler http.Handler) *ActivityLogger {
 
 func (al *ActivityLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	
 	recorder := &responseRecorder{
 		ResponseWriter: w,
 		statusCode:     http.StatusOK,
 	}
-	
+
 	al.handler.ServeHTTP(recorder, r)
-	
+
 	duration := time.Since(start)
-	
 	log.Printf(
-		"Method: %s | Path: %s | Status: %d | Duration: %v | User-Agent: %s",
+		"%s %s %d %s %s",
 		r.Method,
 		r.URL.Path,
 		recorder.statusCode,
-		duration,
-		r.UserAgent(),
+		duration.String(),
+		r.RemoteAddr,
 	)
 }
 
