@@ -203,4 +203,142 @@ func main() {
     }
 
     fmt.Println("Log rotation completed")
+}package main
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+)
+
+const (
+	maxFileSize  = 10 * 1024 * 1024
+	maxBackups   = 5
+	logExtension = ".log"
+)
+
+type RotatingLogger struct {
+	mu        sync.Mutex
+	file      *os.File
+	basePath  string
+	fileSize  int64
+}
+
+func NewRotatingLogger(path string) (*RotatingLogger, error) {
+	rl := &RotatingLogger{basePath: path}
+	if err := rl.openCurrent(); err != nil {
+		return nil, err
+	}
+	return rl, nil
+}
+
+func (rl *RotatingLogger) Write(p []byte) (n int, err error) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	if rl.fileSize+int64(len(p)) > maxFileSize {
+		if err := rl.rotate(); err != nil {
+			return 0, err
+		}
+	}
+
+	n, err = rl.file.Write(p)
+	rl.fileSize += int64(n)
+	return n, err
+}
+
+func (rl *RotatingLogger) openCurrent() error {
+	file, err := os.OpenFile(rl.basePath+logExtension, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+
+	info, err := file.Stat()
+	if err != nil {
+		file.Close()
+		return err
+	}
+
+	rl.file = file
+	rl.fileSize = info.Size()
+	return nil
+}
+
+func (rl *RotatingLogger) rotate() error {
+	if rl.file != nil {
+		rl.file.Close()
+	}
+
+	timestamp := time.Now().Format("20060102_150405")
+	backupPath := fmt.Sprintf("%s.%s%s", rl.basePath, timestamp, logExtension)
+
+	if err := os.Rename(rl.basePath+logExtension, backupPath); err != nil {
+		return err
+	}
+
+	if err := rl.openCurrent(); err != nil {
+		return err
+	}
+
+	return rl.cleanupOld()
+}
+
+func (rl *RotatingLogger) cleanupOld() error {
+	files, err := filepath.Glob(rl.basePath + ".*" + logExtension)
+	if err != nil {
+		return err
+	}
+
+	sort.Sort(sort.Reverse(sort.StringSlice(files)))
+
+	for i := maxBackups; i < len(files); i++ {
+		os.Remove(files[i])
+	}
+	return nil
+}
+
+func (rl *RotatingLogger) Close() error {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	if rl.file != nil {
+		return rl.file.Close()
+	}
+	return nil
+}
+
+func extractTimestamp(filename string) (time.Time, error) {
+	base := filepath.Base(filename)
+	parts := strings.Split(base, ".")
+	if len(parts) < 3 {
+		return time.Time{}, fmt.Errorf("invalid filename format")
+	}
+
+	timestamp := parts[1]
+	return time.Parse("20060102_150405", timestamp)
+}
+
+func main() {
+	logger, err := NewRotatingLogger("application")
+	if err != nil {
+		fmt.Printf("Failed to create logger: %v\n", err)
+		os.Exit(1)
+	}
+	defer logger.Close()
+
+	for i := 0; i < 1000; i++ {
+		message := fmt.Sprintf("[%s] Log entry %d: Test data for rotation\n", 
+			time.Now().Format(time.RFC3339), i)
+		if _, err := logger.Write([]byte(message)); err != nil {
+			fmt.Printf("Write error: %v\n", err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	fmt.Println("Log rotation test completed")
 }
