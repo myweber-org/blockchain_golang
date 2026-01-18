@@ -1,91 +1,55 @@
+
 package main
 
 import (
-	"encoding/csv"
-	"fmt"
-	"io"
-	"os"
+	"errors"
 	"strings"
 )
 
 type DataRecord struct {
-	ID      string
-	Name    string
-	Value   string
-	IsValid bool
+	ID    int
+	Name  string
+	Value float64
+	Tags  []string
 }
 
-func ProcessCSVFile(filePath string) ([]DataRecord, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open file: %w", err)
+func ValidateRecord(record DataRecord) error {
+	if record.ID <= 0 {
+		return errors.New("ID must be positive")
 	}
-	defer file.Close()
-
-	reader := csv.NewReader(file)
-	reader.TrimLeadingSpace = true
-
-	var records []DataRecord
-	lineNumber := 0
-
-	for {
-		lineNumber++
-		row, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("csv read error at line %d: %w", lineNumber, err)
-		}
-
-		if len(row) < 3 {
-			continue
-		}
-
-		record := DataRecord{
-			ID:    strings.TrimSpace(row[0]),
-			Name:  strings.TrimSpace(row[1]),
-			Value: strings.TrimSpace(row[2]),
-		}
-
-		record.IsValid = validateRecord(record)
-		records = append(records, record)
+	if strings.TrimSpace(record.Name) == "" {
+		return errors.New("name cannot be empty")
 	}
-
-	return records, nil
+	if record.Value < 0 {
+		return errors.New("value cannot be negative")
+	}
+	return nil
 }
 
-func validateRecord(record DataRecord) bool {
-	if record.ID == "" || record.Name == "" {
-		return false
-	}
-
-	if len(record.Value) > 100 {
-		return false
-	}
-
-	return true
+func TransformRecord(record DataRecord) DataRecord {
+	transformed := record
+	transformed.Name = strings.ToUpper(strings.TrimSpace(record.Name))
+	transformed.Value = record.Value * 1.1
+	return transformed
 }
 
-func FilterValidRecords(records []DataRecord) []DataRecord {
-	var valid []DataRecord
+func FilterRecords(records []DataRecord, minValue float64) []DataRecord {
+	var filtered []DataRecord
 	for _, record := range records {
-		if record.IsValid {
-			valid = append(valid, record)
+		if record.Value >= minValue {
+			filtered = append(filtered, record)
 		}
 	}
-	return valid
+	return filtered
 }
 
-func GenerateReport(records []DataRecord) {
-	validCount := 0
-	for _, record := range records {
-		if record.IsValid {
-			validCount++
-		}
+func CalculateAverage(records []DataRecord) float64 {
+	if len(records) == 0 {
+		return 0
 	}
-
-	fmt.Printf("Total records processed: %d\n", len(records))
-	fmt.Printf("Valid records: %d\n", validCount)
-	fmt.Printf("Invalid records: %d\n", len(records)-validCount)
+	var total float64
+	for _, record := range records {
+		total += record.Value
+	}
+	return total / float64(len(records))
 }
