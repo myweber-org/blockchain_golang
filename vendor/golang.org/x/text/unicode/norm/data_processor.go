@@ -1,116 +1,45 @@
 package main
 
 import (
-	"encoding/csv"
 	"errors"
-	"io"
-	"strconv"
-	"strings"
-)
-
-type DataRecord struct {
-	ID    int
-	Name  string
-	Value float64
-	Valid bool
-}
-
-func ParseCSVData(reader io.Reader) ([]DataRecord, error) {
-	csvReader := csv.NewReader(reader)
-	records, err := csvReader.ReadAll()
-	if err != nil {
-		return nil, err
-	}
-
-	var data []DataRecord
-	for i, row := range records {
-		if len(row) < 4 {
-			return nil, errors.New("invalid row format at line " + strconv.Itoa(i+1))
-		}
-
-		id, err := strconv.Atoi(strings.TrimSpace(row[0]))
-		if err != nil {
-			return nil, errors.New("invalid ID at line " + strconv.Itoa(i+1))
-		}
-
-		name := strings.TrimSpace(row[1])
-		if name == "" {
-			return nil, errors.New("empty name at line " + strconv.Itoa(i+1))
-		}
-
-		value, err := strconv.ParseFloat(strings.TrimSpace(row[2]), 64)
-		if err != nil {
-			return nil, errors.New("invalid value at line " + strconv.Itoa(i+1))
-		}
-
-		valid := strings.ToLower(strings.TrimSpace(row[3])) == "true"
-
-		data = append(data, DataRecord{
-			ID:    id,
-			Name:  name,
-			Value: value,
-			Valid: valid,
-		})
-	}
-
-	return data, nil
-}
-
-func FilterValidRecords(records []DataRecord) []DataRecord {
-	var validRecords []DataRecord
-	for _, record := range records {
-		if record.Valid && record.Value > 0 {
-			validRecords = append(validRecords, record)
-		}
-	}
-	return validRecords
-}
-
-func CalculateTotalValue(records []DataRecord) float64 {
-	var total float64
-	for _, record := range records {
-		total += record.Value
-	}
-	return total
-}package main
-
-import (
-	"errors"
+	"regexp"
 	"strings"
 )
 
 type UserData struct {
-	Username string
-	Email    string
-	Age      int
+	Email     string
+	Username  string
+	Age       int
 }
 
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+
 func ValidateUserData(data UserData) error {
-	if strings.TrimSpace(data.Username) == "" {
-		return errors.New("username cannot be empty")
+	if strings.TrimSpace(data.Email) == "" {
+		return errors.New("email cannot be empty")
 	}
-	if !strings.Contains(data.Email, "@") {
+	if !emailRegex.MatchString(data.Email) {
 		return errors.New("invalid email format")
 	}
-	if data.Age < 0 || data.Age > 150 {
-		return errors.New("age must be between 0 and 150")
+	if len(strings.TrimSpace(data.Username)) < 3 {
+		return errors.New("username must be at least 3 characters")
+	}
+	if data.Age < 18 || data.Age > 120 {
+		return errors.New("age must be between 18 and 120")
 	}
 	return nil
 }
 
-func TransformUsername(data UserData) UserData {
-	data.Username = strings.ToLower(strings.TrimSpace(data.Username))
-	return data
+func TransformUsername(username string) string {
+	return strings.ToLower(strings.TrimSpace(username))
 }
 
-func ProcessUserInput(rawUsername string, rawEmail string, rawAge int) (UserData, error) {
+func ProcessUserInput(email, username string, age int) (UserData, error) {
 	userData := UserData{
-		Username: rawUsername,
-		Email:    rawEmail,
-		Age:      rawAge,
+		Email:    strings.TrimSpace(email),
+		Username: TransformUsername(username),
+		Age:      age,
 	}
-
-	userData = TransformUsername(userData)
 
 	if err := ValidateUserData(userData); err != nil {
 		return UserData{}, err
