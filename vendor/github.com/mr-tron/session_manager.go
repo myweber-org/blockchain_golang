@@ -1,0 +1,68 @@
+package session
+
+import (
+	"sync"
+	"time"
+)
+
+type Session struct {
+	ID        string
+	Data      map[string]interface{}
+	ExpiresAt time.Time
+}
+
+type Manager struct {
+	sessions map[string]*Session
+	mu       sync.RWMutex
+	ttl      time.Duration
+}
+
+func NewManager(ttl time.Duration) *Manager {
+	m := &Manager{
+		sessions: make(map[string]*Session),
+		ttl:      ttl,
+	}
+	go m.cleanupLoop()
+	return m
+}
+
+func (m *Manager) Create(id string) *Session {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	session := &Session{
+		ID:        id,
+		Data:      make(map[string]interface{}),
+		ExpiresAt: time.Now().Add(m.ttl),
+	}
+	m.sessions[id] = session
+	return session
+}
+
+func (m *Manager) Get(id string) *Session {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if session, exists := m.sessions[id]; exists {
+		if time.Now().Before(session.ExpiresAt) {
+			return session
+		}
+	}
+	return nil
+}
+
+func (m *Manager) cleanupLoop() {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		m.mu.Lock()
+		now := time.Now()
+		for id, session := range m.sessions {
+			if now.After(session.ExpiresAt) {
+				delete(m.sessions, id)
+			}
+		}
+		m.mu.Unlock()
+	}
+}
