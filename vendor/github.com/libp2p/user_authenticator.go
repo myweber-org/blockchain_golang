@@ -45,4 +45,57 @@ func AuthMiddleware(secretKey string) func(http.Handler) http.Handler {
             next.ServeHTTP(w, r)
         })
     }
+}package middleware
+
+import (
+	"net/http"
+	"strings"
+)
+
+type Authenticator struct {
+	secretKey string
+}
+
+func NewAuthenticator(secretKey string) *Authenticator {
+	return &Authenticator{secretKey: secretKey}
+}
+
+func (a *Authenticator) ValidateToken(token string) bool {
+	if token == "" {
+		return false
+	}
+	
+	expectedPrefix := "Bearer "
+	if !strings.HasPrefix(token, expectedPrefix) {
+		return false
+	}
+	
+	tokenValue := strings.TrimPrefix(token, expectedPrefix)
+	return a.isValidJWT(tokenValue)
+}
+
+func (a *Authenticator) isValidJWT(token string) bool {
+	if len(token) < 10 {
+		return false
+	}
+	
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	
+	return true
+}
+
+func (a *Authenticator) Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		
+		if !a.ValidateToken(authHeader) {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		
+		next.ServeHTTP(w, r)
+	})
 }
