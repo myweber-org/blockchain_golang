@@ -10,19 +10,19 @@ import (
 
 type contextKey string
 
-const UserIDKey contextKey = "userID"
+const userIDKey contextKey = "userID"
 
 type AuthMiddleware struct {
-	secretKey []byte
+	jwtSecret []byte
 }
 
-func NewAuthMiddleware(secretKey string) *AuthMiddleware {
+func NewAuthMiddleware(secret string) *AuthMiddleware {
 	return &AuthMiddleware{
-		secretKey: []byte(secretKey),
+		jwtSecret: []byte(secret),
 	}
 }
 
-func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
+func (m *AuthMiddleware) ValidateToken(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
@@ -41,7 +41,7 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, jwt.ErrSignatureInvalid
 			}
-			return m.secretKey, nil
+			return m.jwtSecret, nil
 		})
 
 		if err != nil || !token.Valid {
@@ -49,19 +49,19 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			http.Error(w, "Invalid token claims", http.StatusUnauthorized)
-			return
+		if claims, ok := token.Claims.(jwt.MapClaims); ok {
+			if userID, ok := claims["userID"].(string); ok {
+				ctx := context.WithValue(r.Context(), userIDKey, userID)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
 		}
 
-		userID, ok := claims["user_id"].(string)
-		if !ok || userID == "" {
-			http.Error(w, "Invalid user identifier", http.StatusUnauthorized)
-			return
-		}
-
-		ctx := context.WithValue(r.Context(), UserIDKey, userID)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		http.Error(w, "Invalid token claims", http.StatusUnauthorized)
 	})
+}
+
+func GetUserIDFromContext(ctx context.Context) (string, bool) {
+	userID, ok := ctx.Value(userIDKey).(string)
+	return userID, ok
 }
