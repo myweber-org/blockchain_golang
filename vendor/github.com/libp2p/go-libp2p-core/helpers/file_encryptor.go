@@ -91,3 +91,107 @@ func main() {
 	}
 	fmt.Printf("Decrypted text: %s\n", decrypted)
 }
+package main
+
+import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+)
+
+type FileEncryptor struct {
+	key []byte
+}
+
+func NewFileEncryptor(key string) (*FileEncryptor, error) {
+	if len(key) != 32 {
+		return nil, errors.New("encryption key must be 32 bytes")
+	}
+	return &FileEncryptor{key: []byte(key)}, nil
+}
+
+func (fe *FileEncryptor) EncryptFile(inputPath, outputPath string) error {
+	plaintext, err := os.ReadFile(inputPath)
+	if err != nil {
+		return fmt.Errorf("read input file: %w", err)
+	}
+
+	block, err := aes.NewCipher(fe.key)
+	if err != nil {
+		return fmt.Errorf("create cipher: %w", err)
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return fmt.Errorf("create GCM: %w", err)
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return fmt.Errorf("generate nonce: %w", err)
+	}
+
+	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
+
+	if err := os.WriteFile(outputPath, ciphertext, 0644); err != nil {
+		return fmt.Errorf("write output file: %w", err)
+	}
+
+	return nil
+}
+
+func (fe *FileEncryptor) DecryptFile(inputPath, outputPath string) error {
+	ciphertext, err := os.ReadFile(inputPath)
+	if err != nil {
+		return fmt.Errorf("read input file: %w", err)
+	}
+
+	block, err := aes.NewCipher(fe.key)
+	if err != nil {
+		return fmt.Errorf("create cipher: %w", err)
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return fmt.Errorf("create GCM: %w", err)
+	}
+
+	nonceSize := gcm.NonceSize()
+	if len(ciphertext) < nonceSize {
+		return errors.New("ciphertext too short")
+	}
+
+	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return fmt.Errorf("decrypt: %w", err)
+	}
+
+	if err := os.WriteFile(outputPath, plaintext, 0644); err != nil {
+		return fmt.Errorf("write output file: %w", err)
+	}
+
+	return nil
+}
+
+func main() {
+	encryptor, err := NewFileEncryptor("this-is-a-32-byte-encryption-key!!")
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	if err := encryptor.EncryptFile("test.txt", "test.enc"); err != nil {
+		fmt.Printf("Encryption failed: %v\n", err)
+	}
+
+	if err := encryptor.DecryptFile("test.enc", "test_decrypted.txt"); err != nil {
+		fmt.Printf("Decryption failed: %v\n", err)
+	}
+
+	fmt.Println("File encryption/decryption completed")
+}
