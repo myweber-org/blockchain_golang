@@ -1,82 +1,67 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 )
 
-type DataRecord struct {
-	ID    int
+type Record struct {
+	ID    string
 	Email string
-	Valid bool
+	Phone string
 }
 
-func deduplicateEmails(emails []string) []string {
+func generateHash(email, phone string) string {
+	data := strings.ToLower(strings.TrimSpace(email)) + "|" + strings.TrimSpace(phone)
+	hash := sha256.Sum256([]byte(data))
+	return hex.EncodeToString(hash[:])
+}
+
+func deduplicateRecords(records []Record) []Record {
 	seen := make(map[string]bool)
-	result := []string{}
-	for _, email := range emails {
-		normalized := strings.ToLower(strings.TrimSpace(email))
-		if !seen[normalized] {
-			seen[normalized] = true
-			result = append(result, normalized)
+	var unique []Record
+
+	for _, record := range records {
+		hash := generateHash(record.Email, record.Phone)
+		if !seen[hash] {
+			seen[hash] = true
+			unique = append(unique, record)
 		}
 	}
-	return result
+	return unique
 }
 
-func validateEmailFormat(email string) bool {
+func validateEmail(email string) bool {
 	return strings.Contains(email, "@") && strings.Contains(email, ".")
 }
 
-func cleanData(records []DataRecord) []DataRecord {
-	emailSet := make(map[string]bool)
-	cleaned := []DataRecord{}
-	for _, rec := range records {
-		normalizedEmail := strings.ToLower(strings.TrimSpace(rec.Email))
-		if !emailSet[normalizedEmail] && validateEmailFormat(normalizedEmail) {
-			emailSet[normalizedEmail] = true
-			rec.Email = normalizedEmail
-			rec.Valid = true
-			cleaned = append(cleaned, rec)
+func cleanData(records []Record) []Record {
+	var valid []Record
+	for _, record := range records {
+		if validateEmail(record.Email) && len(record.Phone) >= 10 {
+			valid = append(valid, record)
 		}
 	}
-	return cleaned
+	return deduplicateRecords(valid)
 }
 
 func main() {
-	sampleData := []DataRecord{
-		{1, "user@example.com", false},
-		{2, "USER@example.com", false},
-		{3, "invalid-email", false},
-		{4, "another@domain.org", false},
-		{5, "user@example.com", false},
+	sampleData := []Record{
+		{ID: "1", Email: "user@example.com", Phone: "1234567890"},
+		{ID: "2", Email: "user@example.com", Phone: "1234567890"},
+		{ID: "3", Email: "invalid-email", Phone: "1234567890"},
+		{ID: "4", Email: "another@test.org", Phone: "0987654321"},
+		{ID: "5", Email: "another@test.org", Phone: "0987654321"},
+		{ID: "6", Email: "short@phone.com", Phone: "123"},
 	}
+
 	cleaned := cleanData(sampleData)
-	fmt.Printf("Original: %d, Cleaned: %d\n", len(sampleData), len(cleaned))
-	for _, rec := range cleaned {
-		fmt.Printf("ID: %d, Email: %s, Valid: %v\n", rec.ID, rec.Email, rec.Valid)
+	fmt.Printf("Original: %d records\n", len(sampleData))
+	fmt.Printf("Cleaned: %d records\n", len(cleaned))
+
+	for _, record := range cleaned {
+		fmt.Printf("ID: %s, Email: %s\n", record.ID, record.Email)
 	}
-}
-package main
-
-import "fmt"
-
-func removeDuplicates(nums []int) []int {
-	seen := make(map[int]bool)
-	result := []int{}
-
-	for _, num := range nums {
-		if !seen[num] {
-			seen[num] = true
-			result = append(result, num)
-		}
-	}
-	return result
-}
-
-func main() {
-	data := []int{1, 2, 2, 3, 4, 4, 5, 1, 6}
-	cleaned := removeDuplicates(data)
-	fmt.Println("Original:", data)
-	fmt.Println("Cleaned:", cleaned)
 }
