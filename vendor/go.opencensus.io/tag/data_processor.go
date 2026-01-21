@@ -1,145 +1,99 @@
+
 package main
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
-)
-
-// ValidateJSON checks if the provided byte slice contains valid JSON.
-func ValidateJSON(data []byte) bool {
-	var js interface{}
-	return json.Unmarshal(data, &js) == nil
-}
-
-// ParseUserData attempts to parse JSON data into a map.
-func ParseUserData(jsonData []byte) (map[string]interface{}, error) {
-	var result map[string]interface{}
-	err := json.Unmarshal(jsonData, &result)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %w", err)
-	}
-	return result, nil
-}
-
-func main() {
-	sampleJSON := []byte(`{"name": "Alice", "age": 30, "active": true}`)
-
-	if ValidateJSON(sampleJSON) {
-		fmt.Println("JSON is valid.")
-		parsed, err := ParseUserData(sampleJSON)
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Printf("Parsed data: %v\n", parsed)
-	} else {
-		fmt.Println("Invalid JSON.")
-	}
-}
-package main
-
-import (
-    "encoding/csv"
-    "errors"
-    "fmt"
-    "io"
-    "os"
-    "strconv"
+	"strings"
+	"time"
 )
 
 type DataRecord struct {
-    ID    int
-    Name  string
-    Value float64
-}
-
-func ProcessCSVFile(filename string) ([]DataRecord, error) {
-    file, err := os.Open(filename)
-    if err != nil {
-        return nil, fmt.Errorf("failed to open file: %w", err)
-    }
-    defer file.Close()
-
-    reader := csv.NewReader(file)
-    records := make([]DataRecord, 0)
-
-    lineNumber := 0
-    for {
-        lineNumber++
-        row, err := reader.Read()
-        if err == io.EOF {
-            break
-        }
-        if err != nil {
-            return nil, fmt.Errorf("csv read error at line %d: %w", lineNumber, err)
-        }
-
-        if len(row) != 3 {
-            return nil, fmt.Errorf("invalid column count at line %d: expected 3, got %d", lineNumber, len(row))
-        }
-
-        id, err := strconv.Atoi(row[0])
-        if err != nil {
-            return nil, fmt.Errorf("invalid ID at line %d: %w", lineNumber, err)
-        }
-
-        name := row[1]
-        if name == "" {
-            return nil, fmt.Errorf("empty name at line %d", lineNumber)
-        }
-
-        value, err := strconv.ParseFloat(row[2], 64)
-        if err != nil {
-            return nil, fmt.Errorf("invalid value at line %d: %w", lineNumber, err)
-        }
-
-        if value < 0 {
-            return nil, fmt.Errorf("negative value at line %d: %f", lineNumber, value)
-        }
-
-        records = append(records, DataRecord{
-            ID:    id,
-            Name:  name,
-            Value: value,
-        })
-    }
-
-    if len(records) == 0 {
-        return nil, errors.New("no valid records found in file")
-    }
-
-    return records, nil
-}
-
-func CalculateStatistics(records []DataRecord) (float64, float64, int) {
-    if len(records) == 0 {
-        return 0, 0, 0
-    }
-
-    var sum float64
-    maxValue := records[0].Value
-    count := len(records)
-
-    for _, record := range records {
-        sum += record.Value
-        if record.Value > maxValue {
-            maxValue = record.Value
-        }
-    }
-
-    average := sum / float64(count)
-    return average, maxValue, count
+	ID        string
+	Timestamp time.Time
+	Value     float64
+	Tags      []string
+	Valid     bool
 }
 
 func ValidateRecord(record DataRecord) error {
-    if record.ID <= 0 {
-        return errors.New("ID must be positive")
-    }
-    if record.Name == "" {
-        return errors.New("name cannot be empty")
-    }
-    if record.Value < 0 {
-        return errors.New("value cannot be negative")
-    }
-    return nil
+	if record.ID == "" {
+		return errors.New("record ID cannot be empty")
+	}
+	if record.Value < 0 {
+		return errors.New("record value cannot be negative")
+	}
+	if len(record.Tags) == 0 {
+		return errors.New("record must have at least one tag")
+	}
+	return nil
+}
+
+func TransformRecord(record DataRecord) DataRecord {
+	transformed := record
+	transformed.Tags = normalizeTags(record.Tags)
+	transformed.Value = roundValue(record.Value)
+	transformed.Valid = true
+	return transformed
+}
+
+func normalizeTags(tags []string) []string {
+	uniqueTags := make(map[string]bool)
+	var result []string
+	
+	for _, tag := range tags {
+		normalized := strings.ToLower(strings.TrimSpace(tag))
+		if normalized != "" && !uniqueTags[normalized] {
+			uniqueTags[normalized] = true
+			result = append(result, normalized)
+		}
+	}
+	return result
+}
+
+func roundValue(value float64) float64 {
+	return float64(int(value*100)) / 100
+}
+
+func ProcessRecords(records []DataRecord) ([]DataRecord, error) {
+	var processed []DataRecord
+	
+	for _, record := range records {
+		if err := ValidateRecord(record); err != nil {
+			return nil, fmt.Errorf("validation failed for record %s: %w", record.ID, err)
+		}
+		
+		processed = append(processed, TransformRecord(record))
+	}
+	
+	return processed, nil
+}
+
+func main() {
+	records := []DataRecord{
+		{
+			ID:        "rec001",
+			Timestamp: time.Now(),
+			Value:     123.4567,
+			Tags:      []string{"Sensor", "TEMPERATURE", "sensor"},
+		},
+		{
+			ID:        "rec002",
+			Timestamp: time.Now().Add(-1 * time.Hour),
+			Value:     98.765,
+			Tags:      []string{"pressure", "  PRESSURE  "},
+		},
+	}
+	
+	processed, err := ProcessRecords(records)
+	if err != nil {
+		fmt.Printf("Processing error: %v\n", err)
+		return
+	}
+	
+	fmt.Printf("Successfully processed %d records\n", len(processed))
+	for _, rec := range processed {
+		fmt.Printf("Record %s: value=%.2f, tags=%v, valid=%v\n", 
+			rec.ID, rec.Value, rec.Tags, rec.Valid)
+	}
 }
