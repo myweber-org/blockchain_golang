@@ -114,4 +114,70 @@ func main() {
 
 	highScorers := filterByScoreThreshold(records, 80.0)
 	fmt.Printf("Records with score >= 80: %d\n", len(highScorers))
+}package main
+
+import (
+	"encoding/csv"
+	"fmt"
+	"io"
+	"log"
+	"os"
+	"strings"
+)
+
+func cleanCSV(inputPath, outputPath string) error {
+	inFile, err := os.Open(inputPath)
+	if err != nil {
+		return err
+	}
+	defer inFile.Close()
+
+	outFile, err := os.Create(outputPath)
+	if err != nil {
+		return err
+	}
+	defer outFile.Close()
+
+	reader := csv.NewReader(inFile)
+	writer := csv.NewWriter(outFile)
+	defer writer.Flush()
+
+	headers, err := reader.Read()
+	if err != nil {
+		return err
+	}
+	if err := writer.Write(headers); err != nil {
+		return err
+	}
+
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Printf("Skipping invalid record: %v", err)
+			continue
+		}
+
+		cleaned := make([]string, len(record))
+		for i, field := range record {
+			cleaned[i] = strings.TrimSpace(field)
+		}
+		if err := writer.Write(cleaned); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func main() {
+	if len(os.Args) != 3 {
+		fmt.Println("Usage: data_cleaner <input.csv> <output.csv>")
+		os.Exit(1)
+	}
+	if err := cleanCSV(os.Args[1], os.Args[2]); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("CSV cleaning completed successfully")
 }
