@@ -76,4 +76,61 @@ func setFieldFromEnv(field interface{}, envVar string) {
 func DefaultConfigPath() string {
     homeDir, _ := os.UserHomeDir()
     return filepath.Join(homeDir, ".app", "config.yaml")
+}package config
+
+import (
+    "io"
+    "os"
+    "gopkg.in/yaml.v3"
+)
+
+type Config struct {
+    Server struct {
+        Host string `yaml:"host"`
+        Port int    `yaml:"port"`
+    } `yaml:"server"`
+    Database struct {
+        Host     string `yaml:"host"`
+        Username string `yaml:"username"`
+        Password string `yaml:"password"`
+        Name     string `yaml:"name"`
+    } `yaml:"database"`
+    Logging struct {
+        Level  string `yaml:"level"`
+        Output string `yaml:"output"`
+    } `yaml:"logging"`
+}
+
+func LoadConfig(path string) (*Config, error) {
+    file, err := os.Open(path)
+    if err != nil {
+        return nil, err
+    }
+    defer file.Close()
+
+    data, err := io.ReadAll(file)
+    if err != nil {
+        return nil, err
+    }
+
+    var config Config
+    err = yaml.Unmarshal(data, &config)
+    if err != nil {
+        return nil, err
+    }
+
+    return &config, nil
+}
+
+func (c *Config) Validate() error {
+    if c.Server.Host == "" {
+        c.Server.Host = "localhost"
+    }
+    if c.Server.Port == 0 {
+        c.Server.Port = 8080
+    }
+    if c.Logging.Level == "" {
+        c.Logging.Level = "info"
+    }
+    return nil
 }
