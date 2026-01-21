@@ -1,51 +1,24 @@
+
 package main
 
-import (
-	"fmt"
-	"strings"
-)
+import "fmt"
 
-type DataCleaner struct {
-	seen map[string]bool
-}
+func RemoveDuplicates(input []int) []int {
+	seen := make(map[int]bool)
+	result := []int{}
 
-func NewDataCleaner() *DataCleaner {
-	return &DataCleaner{
-		seen: make(map[string]bool),
-	}
-}
-
-func (dc *DataCleaner) RemoveDuplicates(items []string) []string {
-	var unique []string
-	for _, item := range items {
-		normalized := dc.normalize(item)
-		if !dc.seen[normalized] {
-			dc.seen[normalized] = true
-			unique = append(unique, item)
+	for _, value := range input {
+		if !seen[value] {
+			seen[value] = true
+			result = append(result, value)
 		}
 	}
-	return unique
-}
-
-func (dc *DataCleaner) normalize(s string) string {
-	return strings.ToLower(strings.TrimSpace(s))
-}
-
-func (dc *DataCleaner) Reset() {
-	dc.seen = make(map[string]bool)
+	return result
 }
 
 func main() {
-	cleaner := NewDataCleaner()
-	
-	data := []string{"Apple", "apple", " BANANA", "banana ", "Cherry", "cherry"}
-	cleaned := cleaner.RemoveDuplicates(data)
-	
+	data := []int{1, 2, 2, 3, 4, 4, 5, 1, 6}
+	cleaned := RemoveDuplicates(data)
 	fmt.Println("Original:", data)
 	fmt.Println("Cleaned:", cleaned)
-	
-	cleaner.Reset()
-	anotherSet := []string{"dog", "Dog", "CAT", "cat"}
-	cleaned2 := cleaner.RemoveDuplicates(anotherSet)
-	fmt.Println("Second set cleaned:", cleaned2)
 }
