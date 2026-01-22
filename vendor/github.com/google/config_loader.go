@@ -74,4 +74,60 @@ func validateConfig(c *Config) error {
 		return errors.New("database name is required")
 	}
 	return nil
+}package config
+
+import (
+    "io/ioutil"
+    "log"
+
+    "gopkg.in/yaml.v2"
+)
+
+type DatabaseConfig struct {
+    Host     string `yaml:"host"`
+    Port     int    `yaml:"port"`
+    Username string `yaml:"username"`
+    Password string `yaml:"password"`
+    Name     string `yaml:"name"`
+}
+
+type ServerConfig struct {
+    Port int    `yaml:"port"`
+    Env  string `yaml:"env"`
+}
+
+type Config struct {
+    Database DatabaseConfig `yaml:"database"`
+    Server   ServerConfig   `yaml:"server"`
+}
+
+func LoadConfig(path string) (*Config, error) {
+    data, err := ioutil.ReadFile(path)
+    if err != nil {
+        return nil, err
+    }
+
+    var config Config
+    err = yaml.Unmarshal(data, &config)
+    if err != nil {
+        return nil, err
+    }
+
+    return &config, nil
+}
+
+func ValidateConfig(config *Config) bool {
+    if config.Database.Host == "" {
+        log.Println("Database host is required")
+        return false
+    }
+    if config.Database.Port <= 0 {
+        log.Println("Database port must be positive")
+        return false
+    }
+    if config.Server.Port <= 0 {
+        log.Println("Server port must be positive")
+        return false
+    }
+    return true
 }
