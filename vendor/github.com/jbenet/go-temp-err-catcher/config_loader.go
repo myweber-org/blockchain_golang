@@ -1,87 +1,79 @@
+
 package config
 
 import (
-    "fmt"
-    "os"
-    "path/filepath"
-
-    "gopkg.in/yaml.v2"
+	"errors"
+	"os"
+	"strconv"
+	"strings"
 )
 
-type DatabaseConfig struct {
-    Host     string `yaml:"host" env:"DB_HOST"`
-    Port     int    `yaml:"port" env:"DB_PORT"`
-    Username string `yaml:"username" env:"DB_USER"`
-    Password string `yaml:"password" env:"DB_PASS"`
-    Name     string `yaml:"name" env:"DB_NAME"`
+type AppConfig struct {
+	ServerPort int
+	DebugMode  bool
+	DatabaseURL string
+	APIKeys    []string
 }
 
-type ServerConfig struct {
-    Port         int    `yaml:"port" env:"SERVER_PORT"`
-    ReadTimeout  int    `yaml:"read_timeout" env:"READ_TIMEOUT"`
-    WriteTimeout int    `yaml:"write_timeout" env:"WRITE_TIMEOUT"`
-    DebugMode    bool   `yaml:"debug_mode" env:"DEBUG_MODE"`
-    LogLevel     string `yaml:"log_level" env:"LOG_LEVEL"`
+func LoadConfig() (*AppConfig, error) {
+	cfg := &AppConfig{}
+	var err error
+
+	cfg.ServerPort, err = getIntEnv("SERVER_PORT", 8080)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg.DebugMode, err = getBoolEnv("DEBUG_MODE", false)
+	if err != nil {
+		return nil, err
+	}
+
+	cfg.DatabaseURL = getStringEnv("DATABASE_URL", "postgres://localhost:5432/appdb")
+	if cfg.DatabaseURL == "" {
+		return nil, errors.New("DATABASE_URL cannot be empty")
+	}
+
+	apiKeysStr := getStringEnv("API_KEYS", "")
+	if apiKeysStr != "" {
+		cfg.APIKeys = strings.Split(apiKeysStr, ",")
+		for i, key := range cfg.APIKeys {
+			cfg.APIKeys[i] = strings.TrimSpace(key)
+		}
+	}
+
+	if len(cfg.APIKeys) == 0 {
+		return nil, errors.New("at least one API key is required")
+	}
+
+	return cfg, nil
 }
 
-type Config struct {
-    Database DatabaseConfig `yaml:"database"`
-    Server   ServerConfig   `yaml:"server"`
+func getStringEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }
 
-func LoadConfig(configPath string) (*Config, error) {
-    data, err := os.ReadFile(configPath)
-    if err != nil {
-        return nil, fmt.Errorf("failed to read config file: %w", err)
-    }
-
-    var cfg Config
-    if err := yaml.Unmarshal(data, &cfg); err != nil {
-        return nil, fmt.Errorf("failed to parse YAML: %w", err)
-    }
-
-    overrideFromEnv(&cfg)
-    return &cfg, nil
+func getIntEnv(key string, defaultValue int) (int, error) {
+	if value := os.Getenv(key); value != "" {
+		intValue, err := strconv.Atoi(value)
+		if err != nil {
+			return 0, errors.New("invalid integer value for " + key)
+		}
+		return intValue, nil
+	}
+	return defaultValue, nil
 }
 
-func overrideFromEnv(cfg *Config) {
-    overrideString(&cfg.Database.Host, "DB_HOST")
-    overrideInt(&cfg.Database.Port, "DB_PORT")
-    overrideString(&cfg.Database.Username, "DB_USER")
-    overrideString(&cfg.Database.Password, "DB_PASS")
-    overrideString(&cfg.Database.Name, "DB_NAME")
-
-    overrideInt(&cfg.Server.Port, "SERVER_PORT")
-    overrideInt(&cfg.Server.ReadTimeout, "READ_TIMEOUT")
-    overrideInt(&cfg.Server.WriteTimeout, "WRITE_TIMEOUT")
-    overrideBool(&cfg.Server.DebugMode, "DEBUG_MODE")
-    overrideString(&cfg.Server.LogLevel, "LOG_LEVEL")
-}
-
-func overrideString(field *string, envVar string) {
-    if val := os.Getenv(envVar); val != "" {
-        *field = val
-    }
-}
-
-func overrideInt(field *int, envVar string) {
-    if val := os.Getenv(envVar); val != "" {
-        var intVal int
-        if _, err := fmt.Sscanf(val, "%d", &intVal); err == nil {
-            *field = intVal
-        }
-    }
-}
-
-func overrideBool(field *bool, envVar string) {
-    if val := os.Getenv(envVar); val != "" {
-        *field = val == "true" || val == "1" || val == "yes"
-    }
-}
-
-func DefaultConfigPath() string {
-    if path := os.Getenv("CONFIG_PATH"); path != "" {
-        return path
-    }
-    return filepath.Join("configs", "application.yaml")
+func getBoolEnv(key string, defaultValue bool) (bool, error) {
+	if value := os.Getenv(key); value != "" {
+		boolValue, err := strconv.ParseBool(value)
+		if err != nil {
+			return false, errors.New("invalid boolean value for " + key)
+		}
+		return boolValue, nil
+	}
+	return defaultValue, nil
 }
