@@ -1,146 +1,95 @@
-
 package main
 
 import (
 	"encoding/csv"
-	"fmt"
+	"errors"
 	"io"
 	"os"
-	"strings"
+	"strconv"
 )
 
-type DataProcessor struct {
-	InputPath  string
-	OutputPath string
-	Delimiter  rune
+type DataRecord struct {
+	ID    int
+	Name  string
+	Value float64
 }
 
-func NewDataProcessor(input, output string) *DataProcessor {
-	return &DataProcessor{
-		InputPath:  input,
-		OutputPath: output,
-		Delimiter:  ',',
-	}
-}
-
-func (dp *DataProcessor) ValidateCSV() error {
-	file, err := os.Open(dp.InputPath)
+func ReadCSVFile(filename string) ([]DataRecord, error) {
+	file, err := os.Open(filename)
 	if err != nil {
-		return fmt.Errorf("failed to open input file: %w", err)
+		return nil, err
 	}
 	defer file.Close()
 
 	reader := csv.NewReader(file)
-	reader.Comma = dp.Delimiter
+	var records []DataRecord
+	lineNumber := 0
 
-	headers, err := reader.Read()
-	if err != nil {
-		return fmt.Errorf("failed to read headers: %w", err)
-	}
-
-	if len(headers) == 0 {
-		return fmt.Errorf("csv file contains no headers")
-	}
-
-	rowCount := 1
 	for {
-		record, err := reader.Read()
+		line, err := reader.Read()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("error reading row %d: %w", rowCount, err)
+			return nil, err
 		}
 
-		if len(record) != len(headers) {
-			return fmt.Errorf("row %d has %d columns, expected %d", rowCount, len(record), len(headers))
+		lineNumber++
+		if lineNumber == 1 {
+			continue
 		}
 
-		for i, field := range record {
-			if strings.TrimSpace(field) == "" {
-				return fmt.Errorf("empty value in row %d, column %d", rowCount, i+1)
-			}
+		if len(line) != 3 {
+			return nil, errors.New("invalid column count at line " + strconv.Itoa(lineNumber))
 		}
-		rowCount++
-	}
 
-	return nil
-}
-
-func (dp *DataProcessor) TransformData() error {
-	if err := dp.ValidateCSV(); err != nil {
-		return fmt.Errorf("validation failed: %w", err)
-	}
-
-	inputFile, err := os.Open(dp.InputPath)
-	if err != nil {
-		return fmt.Errorf("failed to open input file: %w", err)
-	}
-	defer inputFile.Close()
-
-	outputFile, err := os.Create(dp.OutputPath)
-	if err != nil {
-		return fmt.Errorf("failed to create output file: %w", err)
-	}
-	defer outputFile.Close()
-
-	reader := csv.NewReader(inputFile)
-	reader.Comma = dp.Delimiter
-	writer := csv.NewWriter(outputFile)
-	defer writer.Flush()
-
-	headers, err := reader.Read()
-	if err != nil {
-		return fmt.Errorf("failed to read headers: %w", err)
-	}
-
-	transformedHeaders := make([]string, len(headers))
-	for i, header := range headers {
-		transformedHeaders[i] = strings.ToUpper(strings.TrimSpace(header))
-	}
-
-	if err := writer.Write(transformedHeaders); err != nil {
-		return fmt.Errorf("failed to write headers: %w", err)
-	}
-
-	rowCount := 1
-	for {
-		record, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
+		id, err := strconv.Atoi(line[0])
 		if err != nil {
-			return fmt.Errorf("error reading row %d: %w", rowCount, err)
+			return nil, errors.New("invalid ID at line " + strconv.Itoa(lineNumber))
 		}
 
-		transformedRecord := make([]string, len(record))
-		for i, field := range record {
-			transformedRecord[i] = strings.TrimSpace(field)
+		name := line[1]
+		if name == "" {
+			return nil, errors.New("empty name at line " + strconv.Itoa(lineNumber))
 		}
 
-		if err := writer.Write(transformedRecord); err != nil {
-			return fmt.Errorf("failed to write row %d: %w", rowCount, err)
+		value, err := strconv.ParseFloat(line[2], 64)
+		if err != nil {
+			return nil, errors.New("invalid value at line " + strconv.Itoa(lineNumber))
 		}
-		rowCount++
+
+		records = append(records, DataRecord{
+			ID:    id,
+			Name:  name,
+			Value: value,
+		})
 	}
 
+	return records, nil
+}
+
+func ValidateRecords(records []DataRecord) error {
+	seenIDs := make(map[int]bool)
+	for _, record := range records {
+		if record.ID <= 0 {
+			return errors.New("invalid ID: " + strconv.Itoa(record.ID))
+		}
+		if seenIDs[record.ID] {
+			return errors.New("duplicate ID: " + strconv.Itoa(record.ID))
+		}
+		seenIDs[record.ID] = true
+
+		if record.Value < 0 {
+			return errors.New("negative value for ID: " + strconv.Itoa(record.ID))
+		}
+	}
 	return nil
 }
 
-func main() {
-	if len(os.Args) < 3 {
-		fmt.Println("Usage: data_processor <input.csv> <output.csv>")
-		os.Exit(1)
+func CalculateTotalValue(records []DataRecord) float64 {
+	total := 0.0
+	for _, record := range records {
+		total += record.Value
 	}
-
-	processor := NewDataProcessor(os.Args[1], os.Args[2])
-	
-	fmt.Printf("Processing %s to %s\n", processor.InputPath, processor.OutputPath)
-	
-	if err := processor.TransformData(); err != nil {
-		fmt.Printf("Error: %v\n", err)
-		os.Exit(1)
-	}
-	
-	fmt.Println("Data processing completed successfully")
+	return total
 }
