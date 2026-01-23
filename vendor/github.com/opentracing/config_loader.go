@@ -85,4 +85,70 @@ func overrideBool(field *bool, envVar string) {
     if val := os.Getenv(envVar); val != "" {
         *field = val == "true" || val == "1" || val == "yes"
     }
+}package config
+
+import (
+    "fmt"
+    "os"
+    "path/filepath"
+
+    "gopkg.in/yaml.v3"
+)
+
+type DatabaseConfig struct {
+    Host     string `yaml:"host"`
+    Port     int    `yaml:"port"`
+    Username string `yaml:"username"`
+    Password string `yaml:"password"`
+    Name     string `yaml:"name"`
+}
+
+type ServerConfig struct {
+    Port         int            `yaml:"port"`
+    ReadTimeout  int            `yaml:"read_timeout"`
+    WriteTimeout int            `yaml:"write_timeout"`
+    Database     DatabaseConfig `yaml:"database"`
+}
+
+func LoadConfig(configPath string) (*ServerConfig, error) {
+    if configPath == "" {
+        configPath = "config.yaml"
+    }
+
+    absPath, err := filepath.Abs(configPath)
+    if err != nil {
+        return nil, fmt.Errorf("failed to get absolute path: %w", err)
+    }
+
+    data, err := os.ReadFile(absPath)
+    if err != nil {
+        return nil, fmt.Errorf("failed to read config file: %w", err)
+    }
+
+    var config ServerConfig
+    if err := yaml.Unmarshal(data, &config); err != nil {
+        return nil, fmt.Errorf("failed to parse YAML: %w", err)
+    }
+
+    if config.Server.Port == 0 {
+        config.Server.Port = 8080
+    }
+
+    return &config, nil
+}
+
+func (c *ServerConfig) Validate() error {
+    if c.Server.Port < 1 || c.Server.Port > 65535 {
+        return fmt.Errorf("invalid server port: %d", c.Server.Port)
+    }
+
+    if c.Database.Host == "" {
+        return fmt.Errorf("database host cannot be empty")
+    }
+
+    if c.Database.Port < 1 || c.Database.Port > 65535 {
+        return fmt.Errorf("invalid database port: %d", c.Database.Port)
+    }
+
+    return nil
 }
