@@ -111,3 +111,61 @@ func (rr *responseRecorder) WriteHeader(code int) {
 	rr.statusCode = code
 	rr.ResponseWriter.WriteHeader(code)
 }
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "log"
+    "os"
+    "time"
+)
+
+type UserActivity struct {
+    UserID    string    `json:"user_id"`
+    Action    string    `json:"action"`
+    Timestamp time.Time `json:"timestamp"`
+    Details   string    `json:"details,omitempty"`
+}
+
+func logActivity(userID, action, details string) error {
+    activity := UserActivity{
+        UserID:    userID,
+        Action:    action,
+        Timestamp: time.Now().UTC(),
+        Details:   details,
+    }
+
+    file, err := os.OpenFile("activity.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+    if err != nil {
+        return fmt.Errorf("failed to open log file: %w", err)
+    }
+    defer file.Close()
+
+    encoder := json.NewEncoder(file)
+    if err := encoder.Encode(activity); err != nil {
+        return fmt.Errorf("failed to encode activity: %w", err)
+    }
+
+    return nil
+}
+
+func main() {
+    activities := []struct {
+        userID, action, details string
+    }{
+        {"user_123", "login", "from IP 192.168.1.100"},
+        {"user_456", "upload", "file_size: 2048 bytes"},
+        {"user_123", "logout", "session_duration: 30m"},
+    }
+
+    for _, a := range activities {
+        if err := logActivity(a.userID, a.action, a.details); err != nil {
+            log.Printf("Failed to log activity: %v", err)
+        } else {
+            fmt.Printf("Logged: %s - %s\n", a.userID, a.action)
+        }
+    }
+
+    fmt.Println("Activity logging completed")
+}
