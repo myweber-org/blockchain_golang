@@ -121,4 +121,102 @@ func validateConfig(cfg *Config) error {
 		return errors.New("invalid log level")
 	}
 	return nil
+}package config
+
+import (
+    "fmt"
+    "io/ioutil"
+    "os"
+
+    "gopkg.in/yaml.v2"
+)
+
+type AppConfig struct {
+    Server struct {
+        Port int    `yaml:"port"`
+        Host string `yaml:"host"`
+    } `yaml:"server"`
+    Database struct {
+        Name     string `yaml:"name"`
+        User     string `yaml:"user"`
+        Password string `yaml:"password"`
+        Host     string `yaml:"host"`
+        Port     int    `yaml:"port"`
+    } `yaml:"database"`
+    Logging struct {
+        Level  string `yaml:"level"`
+        Output string `yaml:"output"`
+    } `yaml:"logging"`
+}
+
+func LoadConfig(filePath string) (*AppConfig, error) {
+    configFile, err := ioutil.ReadFile(filePath)
+    if err != nil {
+        return nil, fmt.Errorf("failed to read config file: %w", err)
+    }
+
+    var config AppConfig
+    err = yaml.Unmarshal(configFile, &config)
+    if err != nil {
+        return nil, fmt.Errorf("failed to parse YAML: %w", err)
+    }
+
+    return &config, nil
+}
+
+func ValidateConfig(config *AppConfig) error {
+    if config.Server.Port <= 0 || config.Server.Port > 65535 {
+        return fmt.Errorf("invalid server port: %d", config.Server.Port)
+    }
+
+    if config.Database.Name == "" {
+        return fmt.Errorf("database name cannot be empty")
+    }
+
+    if config.Logging.Level != "debug" && config.Logging.Level != "info" && config.Logging.Level != "warn" && config.Logging.Level != "error" {
+        return fmt.Errorf("invalid logging level: %s", config.Logging.Level)
+    }
+
+    return nil
+}
+
+func GetDefaultConfig() *AppConfig {
+    var config AppConfig
+    config.Server.Port = 8080
+    config.Server.Host = "localhost"
+    config.Database.Name = "appdb"
+    config.Database.User = "admin"
+    config.Database.Password = ""
+    config.Database.Host = "localhost"
+    config.Database.Port = 5432
+    config.Logging.Level = "info"
+    config.Logging.Output = "stdout"
+    return &config
+}
+
+func SaveConfig(config *AppConfig, filePath string) error {
+    data, err := yaml.Marshal(config)
+    if err != nil {
+        return fmt.Errorf("failed to marshal config: %w", err)
+    }
+
+    err = ioutil.WriteFile(filePath, data, 0644)
+    if err != nil {
+        return fmt.Errorf("failed to write config file: %w", err)
+    }
+
+    return nil
+}
+
+func LoadOrCreateConfig(filePath string) (*AppConfig, error) {
+    if _, err := os.Stat(filePath); os.IsNotExist(err) {
+        defaultConfig := GetDefaultConfig()
+        err := SaveConfig(defaultConfig, filePath)
+        if err != nil {
+            return nil, fmt.Errorf("failed to create default config: %w", err)
+        }
+        return defaultConfig, nil
+    }
+
+    return LoadConfig(filePath)
 }
