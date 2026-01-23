@@ -82,4 +82,33 @@ func main() {
 	cleaned := removeDuplicates(data)
 	fmt.Println("Original:", data)
 	fmt.Println("Cleaned:", cleaned)
+}package csvutil
+
+import (
+	"strings"
+	"unicode"
+)
+
+// SanitizeString removes potentially problematic characters from CSV fields
+func SanitizeString(input string) string {
+	var builder strings.Builder
+	builder.Grow(len(input))
+
+	for _, r := range input {
+		if r == '"' || r == '\'' || r == '\\' || r == '\n' || r == '\r' {
+			builder.WriteRune(' ')
+			continue
+		}
+		if unicode.IsControl(r) {
+			continue
+		}
+		builder.WriteRune(r)
+	}
+
+	return strings.TrimSpace(builder.String())
+}
+
+// NormalizeWhitespace collapses multiple whitespace characters into single spaces
+func NormalizeWhitespace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
 }
