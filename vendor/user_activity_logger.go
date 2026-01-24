@@ -53,3 +53,57 @@ func (rr *responseRecorder) WriteHeader(code int) {
 	rr.statusCode = code
 	rr.ResponseWriter.WriteHeader(code)
 }
+package main
+
+import (
+	"log"
+	"net/http"
+	"time"
+)
+
+type ActivityLogger struct {
+	handler http.Handler
+}
+
+func (al *ActivityLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	userID := r.Header.Get("X-User-ID")
+	if userID == "" {
+		userID = "anonymous"
+	}
+
+	al.handler.ServeHTTP(w, r)
+
+	duration := time.Since(start)
+	log.Printf("User %s accessed %s %s from %s - Duration: %v",
+		userID, r.Method, r.URL.Path, r.RemoteAddr, duration)
+}
+
+func NewActivityLogger(handler http.Handler) *ActivityLogger {
+	return &ActivityLogger{handler: handler}
+}
+
+func apiHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status": "ok"}`))
+}
+
+func main() {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/data", apiHandler)
+
+	loggedMux := NewActivityLogger(mux)
+
+	server := &http.Server{
+		Addr:         ":8080",
+		Handler:      loggedMux,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+
+	log.Println("Server starting on :8080")
+	if err := server.ListenAndServe(); err != nil {
+		log.Fatal(err)
+	}
+}
