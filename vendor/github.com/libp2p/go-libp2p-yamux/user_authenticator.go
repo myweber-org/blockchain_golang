@@ -1,47 +1,45 @@
-package auth
+package middleware
 
 import (
-    "errors"
-    "time"
-
-    "github.com/golang-jwt/jwt/v4"
+	"net/http"
+	"strings"
 )
 
-type Claims struct {
-    Username string `json:"username"`
-    UserID   int    `json:"user_id"`
-    jwt.RegisteredClaims
+type Authenticator struct {
+	secretKey []byte
 }
 
-var jwtKey = []byte("your_secret_key_here")
-
-func GenerateToken(username string, userID int) (string, error) {
-    expirationTime := time.Now().Add(24 * time.Hour)
-    claims := &Claims{
-        Username: username,
-        UserID:   userID,
-        RegisteredClaims: jwt.RegisteredClaims{
-            ExpiresAt: jwt.NewNumericDate(expirationTime),
-        },
-    }
-
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-    return token.SignedString(jwtKey)
+func NewAuthenticator(secret string) *Authenticator {
+	return &Authenticator{secretKey: []byte(secret)}
 }
 
-func ValidateToken(tokenStr string) (*Claims, error) {
-    claims := &Claims{}
-    token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
-        return jwtKey, nil
-    })
+func (a *Authenticator) ValidateToken(token string) bool {
+	if token == "" {
+		return false
+	}
+	
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	
+	return true
+}
 
-    if err != nil {
-        return nil, err
-    }
-
-    if !token.Valid {
-        return nil, errors.New("invalid token")
-    }
-
-    return claims, nil
+func (a *Authenticator) Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "Authorization header required", http.StatusUnauthorized)
+			return
+		}
+		
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		if !a.ValidateToken(token) {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+		
+		next.ServeHTTP(w, r)
+	})
 }
