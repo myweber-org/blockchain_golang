@@ -2,163 +2,103 @@
 package main
 
 import (
-	"encoding/csv"
-	"fmt"
-	"io"
-	"os"
-	"strings"
+    "encoding/csv"
+    "errors"
+    "fmt"
+    "io"
+    "os"
+    "strconv"
 )
 
-func processCSVFile(inputPath, outputPath string) error {
-	inFile, err := os.Open(inputPath)
-	if err != nil {
-		return fmt.Errorf("failed to open input file: %w", err)
-	}
-	defer inFile.Close()
-
-	outFile, err := os.Create(outputPath)
-	if err != nil {
-		return fmt.Errorf("failed to create output file: %w", err)
-	}
-	defer outFile.Close()
-
-	reader := csv.NewReader(inFile)
-	writer := csv.NewWriter(outFile)
-	defer writer.Flush()
-
-	headerProcessed := false
-	var header []string
-
-	for {
-		record, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("error reading CSV record: %w", err)
-		}
-
-		if !headerProcessed {
-			header = record
-			headerProcessed = true
-			if err := writer.Write(header); err != nil {
-				return fmt.Errorf("error writing header: %w", err)
-			}
-			continue
-		}
-
-		cleanedRecord := make([]string, len(record))
-		for i, field := range record {
-			cleanedField := strings.TrimSpace(field)
-			cleanedField = strings.ToValidUTF8(cleanedField, "")
-			if cleanedField == "" {
-				cleanedField = "N/A"
-			}
-			cleanedRecord[i] = cleanedField
-		}
-
-		if err := writer.Write(cleanedRecord); err != nil {
-			return fmt.Errorf("error writing record: %w", err)
-		}
-	}
-
-	return nil
+type DataRecord struct {
+    ID    int
+    Name  string
+    Value float64
 }
 
-func main() {
-	if len(os.Args) != 3 {
-		fmt.Println("Usage: data_processor <input.csv> <output.csv>")
-		os.Exit(1)
-	}
+func ProcessCSVFile(filename string) ([]DataRecord, error) {
+    file, err := os.Open(filename)
+    if err != nil {
+        return nil, fmt.Errorf("failed to open file: %w", err)
+    }
+    defer file.Close()
 
-	inputFile := os.Args[1]
-	outputFile := os.Args[2]
+    reader := csv.NewReader(file)
+    records := make([]DataRecord, 0)
 
-	if err := processCSVFile(inputFile, outputFile); err != nil {
-		fmt.Printf("Error processing file: %v\n", err)
-		os.Exit(1)
-	}
+    for line := 1; ; line++ {
+        row, err := reader.Read()
+        if err == io.EOF {
+            break
+        }
+        if err != nil {
+            return nil, fmt.Errorf("csv read error at line %d: %w", line, err)
+        }
 
-	fmt.Printf("Successfully processed %s -> %s\n", inputFile, outputFile)
-}
-package main
+        if len(row) != 3 {
+            return nil, fmt.Errorf("invalid column count at line %d: expected 3, got %d", line, len(row))
+        }
 
-import (
-	"encoding/json"
-	"fmt"
-	"regexp"
-	"strings"
-)
+        id, err := strconv.Atoi(row[0])
+        if err != nil {
+            return nil, fmt.Errorf("invalid ID at line %d: %w", line, err)
+        }
 
-type UserData struct {
-	Email     string `json:"email"`
-	Username  string `json:"username"`
-	Age       int    `json:"age"`
-	IPAddress string `json:"ip_address"`
-}
+        value, err := strconv.ParseFloat(row[2], 64)
+        if err != nil {
+            return nil, fmt.Errorf("invalid value at line %d: %w", line, err)
+        }
 
-func normalizeEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
-}
+        records = append(records, DataRecord{
+            ID:    id,
+            Name:  row[1],
+            Value: value,
+        })
+    }
 
-func validateEmail(email string) bool {
-	emailRegex := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
-	matched, _ := regexp.MatchString(emailRegex, email)
-	return matched
-}
+    if len(records) == 0 {
+        return nil, errors.New("no valid records found in file")
+    }
 
-func sanitizeUsername(username string) string {
-	reg := regexp.MustCompile(`[^a-zA-Z0-9_-]`)
-	return reg.ReplaceAllString(username, "")
-}
-
-func validateIP(ip string) bool {
-	ipRegex := `^(\d{1,3}\.){3}\d{1,3}$`
-	matched, _ := regexp.MatchString(ipRegex, ip)
-	return matched
+    return records, nil
 }
 
-func processUserData(rawData []byte) (*UserData, error) {
-	var data UserData
-	err := json.Unmarshal(rawData, &data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal JSON: %v", err)
-	}
-
-	data.Email = normalizeEmail(data.Email)
-	if !validateEmail(data.Email) {
-		return nil, fmt.Errorf("invalid email format: %s", data.Email)
-	}
-
-	data.Username = sanitizeUsername(data.Username)
-	if len(data.Username) < 3 {
-		return nil, fmt.Errorf("username too short")
-	}
-
-	if data.Age < 0 || data.Age > 150 {
-		return nil, fmt.Errorf("invalid age value: %d", data.Age)
-	}
-
-	if !validateIP(data.IPAddress) {
-		return nil, fmt.Errorf("invalid IP address format: %s", data.IPAddress)
-	}
-
-	return &data, nil
+func ValidateRecords(records []DataRecord) error {
+    idSet := make(map[int]bool)
+    for _, record := range records {
+        if record.ID <= 0 {
+            return fmt.Errorf("invalid record ID: %d", record.ID)
+        }
+        if record.Name == "" {
+            return fmt.Errorf("empty name for record ID: %d", record.ID)
+        }
+        if record.Value < 0 {
+            return fmt.Errorf("negative value for record ID: %d", record.ID)
+        }
+        if idSet[record.ID] {
+            return fmt.Errorf("duplicate ID found: %d", record.ID)
+        }
+        idSet[record.ID] = true
+    }
+    return nil
 }
 
-func main() {
-	jsonData := []byte(`{
-		"email": "  TEST@Example.COM  ",
-		"username": "user_123!@#",
-		"age": 25,
-		"ip_address": "192.168.1.1"
-	}`)
+func CalculateStatistics(records []DataRecord) (float64, float64, int) {
+    if len(records) == 0 {
+        return 0, 0, 0
+    }
 
-	processedData, err := processUserData(jsonData)
-	if err != nil {
-		fmt.Printf("Error processing data: %v\n", err)
-		return
-	}
+    var sum float64
+    var max float64
+    count := len(records)
 
-	fmt.Printf("Processed data: %+v\n", processedData)
+    for i, record := range records {
+        sum += record.Value
+        if i == 0 || record.Value > max {
+            max = record.Value
+        }
+    }
+
+    average := sum / float64(count)
+    return average, max, count
 }
