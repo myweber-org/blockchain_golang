@@ -62,4 +62,62 @@ func main() {
 	for _, r := range cleaned {
 		fmt.Printf("ID: %d, Email: %s, Valid: %v\n", r.ID, r.Email, r.Valid)
 	}
+}package main
+
+import (
+	"encoding/csv"
+	"io"
+	"os"
+)
+
+func RemoveDuplicateRows(inputPath, outputPath string) error {
+	inFile, err := os.Open(inputPath)
+	if err != nil {
+		return err
+	}
+	defer inFile.Close()
+
+	outFile, err := os.Create(outputPath)
+	if err != nil {
+		return err
+	}
+	defer outFile.Close()
+
+	reader := csv.NewReader(inFile)
+	writer := csv.NewWriter(outFile)
+	defer writer.Flush()
+
+	seen := make(map[string]bool)
+
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		key := ""
+		for _, field := range record {
+			key += field + "|"
+		}
+
+		if !seen[key] {
+			seen[key] = true
+			err = writer.Write(record)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func main() {
+	err := RemoveDuplicateRows("input.csv", "output.csv")
+	if err != nil {
+		panic(err)
+	}
 }
