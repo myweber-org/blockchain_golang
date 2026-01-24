@@ -134,4 +134,116 @@ func main() {
 	for _, r := range cleaned {
 		fmt.Printf("ID: %d, Email: %s, Valid: %v\n", r.ID, r.Email, r.Valid)
 	}
+}package main
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"strings"
+)
+
+type DataRecord struct {
+	ID    string
+	Email string
+	Phone string
+	Tags  []string
+}
+
+type Cleaner struct {
+	seenIDs    map[string]bool
+	validEmails map[string]bool
+}
+
+func NewCleaner() *Cleaner {
+	return &Cleaner{
+		seenIDs:    make(map[string]bool),
+		validEmails: make(map[string]bool),
+	}
+}
+
+func (c *Cleaner) GenerateID(email, phone string) string {
+	combined := fmt.Sprintf("%s|%s", strings.ToLower(email), phone)
+	hash := sha256.Sum256([]byte(combined))
+	return hex.EncodeToString(hash[:8])
+}
+
+func (c *Cleaner) IsDuplicate(record DataRecord) bool {
+	if record.ID == "" {
+		record.ID = c.GenerateID(record.Email, record.Phone)
+	}
+	
+	if c.seenIDs[record.ID] {
+		return true
+	}
+	
+	c.seenIDs[record.ID] = true
+	return false
+}
+
+func (c *Cleaner) ValidateEmail(email string) bool {
+	if !strings.Contains(email, "@") || !strings.Contains(email, ".") {
+		return false
+	}
+	
+	if c.validEmails[email] {
+		return false
+	}
+	
+	c.validEmails[email] = true
+	return true
+}
+
+func (c *Cleaner) NormalizeTags(tags []string) []string {
+	unique := make(map[string]bool)
+	var result []string
+	
+	for _, tag := range tags {
+		normalized := strings.ToLower(strings.TrimSpace(tag))
+		if normalized != "" && !unique[normalized] {
+			unique[normalized] = true
+			result = append(result, normalized)
+		}
+	}
+	
+	return result
+}
+
+func (c *Cleaner) ProcessRecords(records []DataRecord) []DataRecord {
+	var cleaned []DataRecord
+	
+	for _, record := range records {
+		if c.IsDuplicate(record) {
+			continue
+		}
+		
+		if !c.ValidateEmail(record.Email) {
+			continue
+		}
+		
+		record.Tags = c.NormalizeTags(record.Tags)
+		cleaned = append(cleaned, record)
+	}
+	
+	return cleaned
+}
+
+func main() {
+	cleaner := NewCleaner()
+	
+	records := []DataRecord{
+		{Email: "test@example.com", Phone: "1234567890", Tags: []string{"Go", "go", "  "}},
+		{Email: "test@example.com", Phone: "1234567890", Tags: []string{"Python"}},
+		{Email: "invalid-email", Phone: "0987654321", Tags: []string{"Java"}},
+		{Email: "new@domain.com", Phone: "5551234567", Tags: []string{"Rust", "rust", "Systems"}},
+	}
+	
+	cleaned := cleaner.ProcessRecords(records)
+	
+	fmt.Printf("Original: %d records\n", len(records))
+	fmt.Printf("Cleaned: %d records\n", len(cleaned))
+	
+	for i, record := range cleaned {
+		fmt.Printf("Record %d: %s - Tags: %v\n", i+1, record.Email, record.Tags)
+	}
 }
