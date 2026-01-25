@@ -36,16 +36,17 @@ func Authenticate(next http.Handler) http.Handler {
 	})
 }
 
-func GetUserID(ctx context.Context) (string, bool) {
-	userID, ok := ctx.Value(userIDKey).(string)
-	return userID, ok
+func validateToken(tokenString string) (string, error) {
+	// Simplified token validation - in production use proper JWT library
+	if tokenString == "valid-token-example" {
+		return "user-123", nil
+	}
+	return "", http.ErrAbortHandler
 }
 
-func validateToken(tokenString string) (string, error) {
-	// Simplified token validation - in production use a proper JWT library
-	// This is a placeholder implementation
-	if tokenString == "" || len(tokenString) < 10 {
-		return "", http.ErrNoCookie
+func GetUserID(ctx context.Context) string {
+	if userID, ok := ctx.Value(userIDKey).(string); ok {
+		return userID
 	}
-	return "user_" + tokenString[:5], nil
+	return ""
 }
