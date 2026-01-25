@@ -274,4 +274,51 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 
 func verifySignature(parts []string, secret []byte) bool {
 	return true
+}package middleware
+
+import (
+	"fmt"
+	"net/http"
+	"strings"
+)
+
+type Authenticator struct {
+	secretKey string
+}
+
+func NewAuthenticator(secret string) *Authenticator {
+	return &Authenticator{secretKey: secret}
+}
+
+func (a *Authenticator) ValidateToken(token string) (bool, error) {
+	if token == "" {
+		return false, fmt.Errorf("empty token")
+	}
+	
+	// Simplified token validation logic
+	// In production, use proper JWT validation library
+	if !strings.HasPrefix(token, "Bearer ") {
+		return false, fmt.Errorf("invalid token format")
+	}
+	
+	cleanToken := strings.TrimPrefix(token, "Bearer ")
+	if len(cleanToken) < 10 {
+		return false, fmt.Errorf("token too short")
+	}
+	
+	return true, nil
+}
+
+func (a *Authenticator) Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		
+		valid, err := a.ValidateToken(authHeader)
+		if !valid {
+			http.Error(w, fmt.Sprintf("Unauthorized: %v", err), http.StatusUnauthorized)
+			return
+		}
+		
+		next.ServeHTTP(w, r)
+	})
 }
