@@ -1,3 +1,4 @@
+
 package main
 
 import (
@@ -75,18 +76,17 @@ func decryptFile(inputPath, outputPath string, key []byte) error {
 }
 
 func main() {
-	key := []byte("examplekey123456")
-	inputFile := "test.txt"
-	encryptedFile := "test.enc"
-	decryptedFile := "test_decrypted.txt"
-
-	if err := encryptFile(inputFile, encryptedFile, key); err != nil {
+	key := []byte("32-byte-long-key-here-123456789012")
+	
+	err := encryptFile("plain.txt", "encrypted.dat", key)
+	if err != nil {
 		fmt.Printf("Encryption failed: %v\n", err)
 		return
 	}
 	fmt.Println("File encrypted successfully")
 
-	if err := decryptFile(encryptedFile, decryptedFile, key); err != nil {
+	err = decryptFile("encrypted.dat", "decrypted.txt", key)
+	if err != nil {
 		fmt.Printf("Decryption failed: %v\n", err)
 		return
 	}
