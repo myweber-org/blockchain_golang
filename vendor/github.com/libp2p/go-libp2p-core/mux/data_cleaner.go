@@ -1,53 +1,68 @@
 
 package main
 
-import "fmt"
-
-func removeDuplicates(nums []int) []int {
-    seen := make(map[int]bool)
-    result := []int{}
-    
-    for _, num := range nums {
-        if !seen[num] {
-            seen[num] = true
-            result = append(result, num)
-        }
-    }
-    return result
-}
-
-func main() {
-    input := []int{1, 2, 2, 3, 4, 4, 5, 6, 6, 7}
-    cleaned := removeDuplicates(input)
-    fmt.Printf("Original: %v\n", input)
-    fmt.Printf("Cleaned: %v\n", cleaned)
-}
-package main
-
 import (
-	"fmt"
-	"strings"
+    "fmt"
+    "strings"
 )
 
-func CleanStringSlice(input []string) []string {
-	seen := make(map[string]bool)
-	var result []string
-	for _, item := range input {
-		trimmed := strings.TrimSpace(item)
-		if trimmed == "" {
-			continue
-		}
-		if !seen[trimmed] {
-			seen[trimmed] = true
-			result = append(result, trimmed)
-		}
-	}
-	return result
+type DataRecord struct {
+    ID    int
+    Email string
+    Phone string
+}
+
+func DeduplicateRecords(records []DataRecord) []DataRecord {
+    seen := make(map[string]bool)
+    var unique []DataRecord
+
+    for _, record := range records {
+        key := fmt.Sprintf("%s|%s", record.Email, record.Phone)
+        if !seen[key] {
+            seen[key] = true
+            unique = append(unique, record)
+        }
+    }
+    return unique
+}
+
+func ValidateEmail(email string) bool {
+    return strings.Contains(email, "@") && strings.Contains(email, ".")
+}
+
+func ValidatePhone(phone string) bool {
+    if len(phone) != 10 {
+        return false
+    }
+    for _, ch := range phone {
+        if ch < '0' || ch > '9' {
+            return false
+        }
+    }
+    return true
+}
+
+func CleanData(records []DataRecord) []DataRecord {
+    var cleaned []DataRecord
+    uniqueRecords := DeduplicateRecords(records)
+
+    for _, record := range uniqueRecords {
+        if ValidateEmail(record.Email) && ValidatePhone(record.Phone) {
+            cleaned = append(cleaned, record)
+        }
+    }
+    return cleaned
 }
 
 func main() {
-	data := []string{"  apple ", "banana", "  apple", "banana ", "  ", "cherry"}
-	cleaned := CleanStringSlice(data)
-	fmt.Println("Original:", data)
-	fmt.Println("Cleaned:", cleaned)
+    sampleData := []DataRecord{
+        {1, "test@example.com", "1234567890"},
+        {2, "invalid-email", "9876543210"},
+        {3, "test@example.com", "1234567890"},
+        {4, "another@test.org", "5551234567"},
+    }
+
+    cleaned := CleanData(sampleData)
+    fmt.Printf("Original: %d records\n", len(sampleData))
+    fmt.Printf("Cleaned: %d records\n", len(cleaned))
 }
