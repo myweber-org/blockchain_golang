@@ -246,4 +246,35 @@ func main() {
 	for i, record := range cleaned {
 		fmt.Printf("Record %d: %s - Tags: %v\n", i+1, record.Email, record.Tags)
 	}
+}package datautils
+
+import (
+	"regexp"
+	"strings"
+	"unicode"
+)
+
+func SanitizeString(input string) string {
+	// Remove any non-printable characters
+	cleaned := strings.Map(func(r rune) rune {
+		if unicode.IsPrint(r) {
+			return r
+		}
+		return -1
+	}, input)
+
+	// Normalize whitespace: replace multiple spaces with single space
+	re := regexp.MustCompile(`\s+`)
+	cleaned = re.ReplaceAllString(cleaned, " ")
+
+	// Trim leading and trailing whitespace
+	cleaned = strings.TrimSpace(cleaned)
+
+	return cleaned
+}
+
+func NormalizeWhitespace(input string) string {
+	// Replace all types of whitespace characters with standard space
+	re := regexp.MustCompile(`[\s\p{Zs}]+`)
+	return re.ReplaceAllString(input, " ")
 }
