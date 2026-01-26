@@ -1,56 +1,30 @@
-package main
+package middleware
 
 import (
-	"encoding/json"
-	"fmt"
 	"log"
-	"os"
+	"net/http"
 	"time"
 )
 
-type ActivityLog struct {
-	Timestamp time.Time `json:"timestamp"`
-	UserID    string    `json:"user_id"`
-	Action    string    `json:"action"`
-	Resource  string    `json:"resource"`
+type ActivityLogger struct {
+	handler http.Handler
 }
 
-func NewActivityLog(userID, action, resource string) *ActivityLog {
-	return &ActivityLog{
-		Timestamp: time.Now().UTC(),
-		UserID:    userID,
-		Action:    action,
-		Resource:  resource,
-	}
+func NewActivityLogger(handler http.Handler) *ActivityLogger {
+	return &ActivityLogger{handler: handler}
 }
 
-func (al *ActivityLog) SaveToFile(filename string) error {
-	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	data, err := json.Marshal(al)
-	if err != nil {
-		return err
-	}
-
-	_, err = file.Write(append(data, '\n'))
-	return err
-}
-
-func main() {
-	logger := NewActivityLog("user_12345", "CREATE", "/api/v1/documents")
+func (al *ActivityLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
 	
-	err := logger.SaveToFile("activity_logs.json")
-	if err != nil {
-		log.Fatal("Failed to save activity log:", err)
-	}
+	al.handler.ServeHTTP(w, r)
 	
-	fmt.Printf("Activity logged: %s performed %s on %s at %s\n",
-		logger.UserID,
-		logger.Action,
-		logger.Resource,
-		logger.Timestamp.Format(time.RFC3339))
+	duration := time.Since(start)
+	
+	log.Printf("Activity: %s %s from %s took %v",
+		r.Method,
+		r.URL.Path,
+		r.RemoteAddr,
+		duration,
+	)
 }
