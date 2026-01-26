@@ -40,3 +40,131 @@ func ContainsOnlyAlphanumeric(s string) bool {
 	re := regexp.MustCompile(`^[a-zA-Z0-9]+$`)
 	return re.MatchString(s)
 }
+package main
+
+import (
+    "encoding/csv"
+    "errors"
+    "fmt"
+    "io"
+    "os"
+    "strconv"
+    "strings"
+)
+
+type Record struct {
+    ID      int
+    Name    string
+    Value   float64
+    Active  bool
+}
+
+func ProcessCSVFile(filename string) ([]Record, error) {
+    file, err := os.Open(filename)
+    if err != nil {
+        return nil, fmt.Errorf("failed to open file: %w", err)
+    }
+    defer file.Close()
+
+    reader := csv.NewReader(file)
+    reader.Comma = ','
+    reader.Comment = '#'
+    reader.FieldsPerRecord = 4
+
+    var records []Record
+    lineNumber := 0
+
+    for {
+        lineNumber++
+        row, err := reader.Read()
+        if err == io.EOF {
+            break
+        }
+        if err != nil {
+            return nil, fmt.Errorf("line %d: %w", lineNumber, err)
+        }
+
+        record, err := parseRow(row)
+        if err != nil {
+            return nil, fmt.Errorf("line %d: %w", lineNumber, err)
+        }
+
+        if err := validateRecord(record); err != nil {
+            return nil, fmt.Errorf("line %d: %w", lineNumber, err)
+        }
+
+        records = append(records, record)
+    }
+
+    if len(records) == 0 {
+        return nil, errors.New("no valid records found")
+    }
+
+    return records, nil
+}
+
+func parseRow(row []string) (Record, error) {
+    var record Record
+
+    id, err := strconv.Atoi(strings.TrimSpace(row[0]))
+    if err != nil {
+        return record, fmt.Errorf("invalid ID: %v", err)
+    }
+    record.ID = id
+
+    name := strings.TrimSpace(row[1])
+    if name == "" {
+        return record, errors.New("name cannot be empty")
+    }
+    record.Name = name
+
+    value, err := strconv.ParseFloat(strings.TrimSpace(row[2]), 64)
+    if err != nil {
+        return record, fmt.Errorf("invalid value: %v", err)
+    }
+    record.Value = value
+
+    active, err := strconv.ParseBool(strings.TrimSpace(row[3]))
+    if err != nil {
+        return record, fmt.Errorf("invalid active flag: %v", err)
+    }
+    record.Active = active
+
+    return record, nil
+}
+
+func validateRecord(r Record) error {
+    if r.ID <= 0 {
+        return errors.New("ID must be positive")
+    }
+    if r.Value < 0 {
+        return errors.New("value cannot be negative")
+    }
+    if len(r.Name) > 100 {
+        return errors.New("name too long")
+    }
+    return nil
+}
+
+func CalculateStats(records []Record) (float64, float64, int) {
+    if len(records) == 0 {
+        return 0, 0, 0
+    }
+
+    var sum float64
+    var activeCount int
+    var minValue float64 = records[0].Value
+
+    for _, record := range records {
+        sum += record.Value
+        if record.Value < minValue {
+            minValue = record.Value
+        }
+        if record.Active {
+            activeCount++
+        }
+    }
+
+    average := sum / float64(len(records))
+    return average, minValue, activeCount
+}
