@@ -200,3 +200,57 @@ func CalculateStatistics(records []DataRecord) (float64, float64, int) {
 	average := sum / float64(validCount)
 	return sum, average, validCount
 }
+package main
+
+import (
+	"errors"
+	"regexp"
+	"strings"
+)
+
+type UserData struct {
+	Email    string
+	Username string
+	Age      int
+}
+
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+
+func ValidateAndTransform(data *UserData) error {
+	if data.Email == "" {
+		return errors.New("email cannot be empty")
+	}
+	if !emailRegex.MatchString(data.Email) {
+		return errors.New("invalid email format")
+	}
+	data.Email = strings.ToLower(strings.TrimSpace(data.Email))
+
+	if data.Username == "" {
+		return errors.New("username cannot be empty")
+	}
+	data.Username = strings.TrimSpace(data.Username)
+	if len(data.Username) < 3 {
+		return errors.New("username must be at least 3 characters")
+	}
+
+	if data.Age < 0 || data.Age > 150 {
+		return errors.New("age must be between 0 and 150")
+	}
+
+	return nil
+}
+
+func ProcessUserInput(email, username string, age int) (*UserData, error) {
+	userData := &UserData{
+		Email:    email,
+		Username: username,
+		Age:      age,
+	}
+
+	err := ValidateAndTransform(userData)
+	if err != nil {
+		return nil, err
+	}
+
+	return userData, nil
+}
