@@ -6,48 +6,55 @@ import (
 	"strings"
 )
 
-type DataCleaner struct {
-	seen map[string]bool
+type DataRecord struct {
+	ID    int
+	Email string
+	Valid bool
 }
 
-func NewDataCleaner() *DataCleaner {
-	return &DataCleaner{
-		seen: make(map[string]bool),
-	}
-}
-
-func (dc *DataCleaner) RemoveDuplicates(items []string) []string {
-	var unique []string
-	for _, item := range items {
-		normalized := strings.ToLower(strings.TrimSpace(item))
-		if !dc.seen[normalized] && dc.isValid(normalized) {
-			dc.seen[normalized] = true
-			unique = append(unique, item)
+func deduplicateEmails(emails []string) []string {
+	seen := make(map[string]bool)
+	result := []string{}
+	for _, email := range emails {
+		email = strings.ToLower(strings.TrimSpace(email))
+		if !seen[email] {
+			seen[email] = true
+			result = append(result, email)
 		}
 	}
-	return unique
+	return result
 }
 
-func (dc *DataCleaner) isValid(item string) bool {
-	return len(item) > 0 && !strings.ContainsAny(item, "!@#$%")
+func validateEmail(email string) bool {
+	return strings.Contains(email, "@") && strings.Contains(email, ".")
 }
 
-func (dc *DataCleaner) Reset() {
-	dc.seen = make(map[string]bool)
+func processRecords(records []DataRecord) []DataRecord {
+	emailMap := make(map[string]bool)
+	var validRecords []DataRecord
+
+	for _, record := range records {
+		cleanEmail := strings.ToLower(strings.TrimSpace(record.Email))
+		if validateEmail(cleanEmail) && !emailMap[cleanEmail] {
+			emailMap[cleanEmail] = true
+			record.Valid = true
+			validRecords = append(validRecords, record)
+		}
+	}
+	return validRecords
 }
 
 func main() {
-	cleaner := NewDataCleaner()
-	
-	data := []string{"apple", "Apple", "banana", "", "cherry!", "banana", "date"}
-	cleaned := cleaner.RemoveDuplicates(data)
-	
-	fmt.Println("Original:", data)
-	fmt.Println("Cleaned:", cleaned)
-	
-	cleaner.Reset()
-	
-	moreData := []string{"grape", "GRAPE", "kiwi"}
-	moreCleaned := cleaner.RemoveDuplicates(moreData)
-	fmt.Println("More cleaned:", moreCleaned)
+	emails := []string{"test@example.com", "TEST@example.com", "invalid", "another@test.org"}
+	uniqueEmails := deduplicateEmails(emails)
+	fmt.Println("Unique emails:", uniqueEmails)
+
+	records := []DataRecord{
+		{1, "user@domain.com", false},
+		{2, "USER@domain.com", false},
+		{3, "bad-email", false},
+		{4, "new@test.net", false},
+	}
+	processed := processRecords(records)
+	fmt.Printf("Valid records: %d\n", len(processed))
 }
