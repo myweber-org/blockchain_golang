@@ -1,4 +1,3 @@
-
 package main
 
 import (
@@ -11,46 +10,45 @@ import (
 	"time"
 )
 
-const (
-	maxFileSize = 10 * 1024 * 1024 // 10MB
-	logDir      = "./logs"
-)
-
 type RotatingLogger struct {
-	currentFile *os.File
-	currentSize int64
-	mu          sync.Mutex
-	baseName    string
+	mu            sync.Mutex
+	currentFile   *os.File
+	basePath      string
+	maxSize       int64
+	currentSize   int64
+	rotationCount int
 }
 
-func NewRotatingLogger(baseName string) (*RotatingLogger, error) {
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		return nil, err
-	}
-
+func NewRotatingLogger(basePath string, maxSizeMB int) (*RotatingLogger, error) {
 	rl := &RotatingLogger{
-		baseName: baseName,
+		basePath: basePath,
+		maxSize:  int64(maxSizeMB) * 1024 * 1024,
 	}
-
 	if err := rl.openCurrentFile(); err != nil {
 		return nil, err
 	}
-
 	return rl, nil
 }
 
 func (rl *RotatingLogger) openCurrentFile() error {
-	timestamp := time.Now().Format("20060102_150405")
-	filename := filepath.Join(logDir, fmt.Sprintf("%s_%s.log", rl.baseName, timestamp))
-	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	dir := filepath.Dir(rl.basePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+
+	f, err := os.OpenFile(rl.basePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
 
-	rl.currentFile = file
-	if info, err := file.Stat(); err == nil {
-		rl.currentSize = info.Size()
+	info, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return err
 	}
+
+	rl.currentFile = f
+	rl.currentSize = info.Size()
 	return nil
 }
 
@@ -58,7 +56,7 @@ func (rl *RotatingLogger) Write(p []byte) (int, error) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	if rl.currentSize+int64(len(p)) > maxFileSize {
+	if rl.currentSize+int64(len(p)) > rl.maxSize {
 		if err := rl.rotate(); err != nil {
 			return 0, err
 		}
@@ -73,41 +71,41 @@ func (rl *RotatingLogger) Write(p []byte) (int, error) {
 
 func (rl *RotatingLogger) rotate() error {
 	if rl.currentFile != nil {
-		oldFile := rl.currentFile
-		if err := oldFile.Close(); err != nil {
-			return err
-		}
-
-		if err := rl.compressFile(oldFile.Name()); err != nil {
-			return err
-		}
-
-		if err := os.Remove(oldFile.Name()); err != nil {
-			return err
-		}
+		rl.currentFile.Close()
 	}
 
+	archivePath := fmt.Sprintf("%s.%d.%s.gz",
+		rl.basePath,
+		rl.rotationCount,
+		time.Now().Format("20060102-150405"))
+
+	src, err := os.Open(rl.basePath)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	dst, err := os.Create(archivePath)
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+
+	gz := gzip.NewWriter(dst)
+	if _, err := io.Copy(gz, src); err != nil {
+		gz.Close()
+		return err
+	}
+	if err := gz.Close(); err != nil {
+		return err
+	}
+
+	if err := os.Remove(rl.basePath); err != nil {
+		return err
+	}
+
+	rl.rotationCount++
 	return rl.openCurrentFile()
-}
-
-func (rl *RotatingLogger) compressFile(filename string) error {
-	source, err := os.Open(filename)
-	if err != nil {
-		return err
-	}
-	defer source.Close()
-
-	dest, err := os.Create(filename + ".gz")
-	if err != nil {
-		return err
-	}
-	defer dest.Close()
-
-	gz := gzip.NewWriter(dest)
-	defer gz.Close()
-
-	_, err = io.Copy(gz, source)
-	return err
 }
 
 func (rl *RotatingLogger) Close() error {
@@ -121,20 +119,18 @@ func (rl *RotatingLogger) Close() error {
 }
 
 func main() {
-	logger, err := NewRotatingLogger("app")
+	logger, err := NewRotatingLogger("/var/log/myapp/app.log", 10)
 	if err != nil {
 		panic(err)
 	}
 	defer logger.Close()
 
-	for i := 0; i < 100; i++ {
-		message := fmt.Sprintf("[%s] Log entry %d: Test message for rotation\n",
+	for i := 0; i < 1000; i++ {
+		msg := fmt.Sprintf("[%s] Log entry %d: Application event processed\n",
 			time.Now().Format(time.RFC3339), i)
-		if _, err := logger.Write([]byte(message)); err != nil {
+		if _, err := logger.Write([]byte(msg)); err != nil {
 			fmt.Printf("Write error: %v\n", err)
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-
-	fmt.Println("Log rotation test completed")
 }
