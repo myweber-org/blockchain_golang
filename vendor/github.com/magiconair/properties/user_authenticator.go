@@ -40,7 +40,7 @@ func AuthMiddleware(secretKey string) func(http.Handler) http.Handler {
 			})
 
 			if err != nil || !token.Valid {
-				http.Error(w, "Invalid token", http.StatusUnauthorized)
+				http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
 				return
 			}
 
