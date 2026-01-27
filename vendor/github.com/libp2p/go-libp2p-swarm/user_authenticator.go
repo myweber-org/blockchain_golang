@@ -1,108 +1,47 @@
-package main
+package middleware
 
 import (
-    "fmt"
-    "time"
+    "net/http"
+    "strings"
     "github.com/golang-jwt/jwt/v5"
 )
 
 type Claims struct {
     Username string `json:"username"`
-    UserID   int    `json:"user_id"`
+    Role     string `json:"role"`
     jwt.RegisteredClaims
 }
 
-var jwtKey = []byte("your_secret_key_here")
+func AuthMiddleware(secretKey []byte) func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            authHeader := r.Header.Get("Authorization")
+            if authHeader == "" {
+                http.Error(w, "Authorization header required", http.StatusUnauthorized)
+                return
+            }
 
-func GenerateToken(username string, userID int) (string, error) {
-    expirationTime := time.Now().Add(24 * time.Hour)
-    claims := &Claims{
-        Username: username,
-        UserID:   userID,
-        RegisteredClaims: jwt.RegisteredClaims{
-            ExpiresAt: jwt.NewNumericDate(expirationTime),
-            IssuedAt:  jwt.NewNumericDate(time.Now()),
-            Issuer:    "auth_service",
-        },
-    }
+            parts := strings.Split(authHeader, " ")
+            if len(parts) != 2 || parts[0] != "Bearer" {
+                http.Error(w, "Invalid authorization format", http.StatusUnauthorized)
+                return
+            }
 
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-    return token.SignedString(jwtKey)
-}
+            tokenStr := parts[1]
+            claims := &Claims{}
 
-func ValidateToken(tokenString string) (*Claims, error) {
-    claims := &Claims{}
-    token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-        return jwtKey, nil
-    })
+            token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
+                return secretKey, nil
+            })
 
-    if err != nil {
-        return nil, err
-    }
+            if err != nil || !token.Valid {
+                http.Error(w, "Invalid token", http.StatusUnauthorized)
+                return
+            }
 
-    if !token.Valid {
-        return nil, fmt.Errorf("invalid token")
-    }
-
-    return claims, nil
-}
-
-func main() {
-    token, err := GenerateToken("john_doe", 123)
-    if err != nil {
-        fmt.Printf("Error generating token: %v\n", err)
-        return
-    }
-
-    fmt.Printf("Generated token: %s\n", token)
-
-    claims, err := ValidateToken(token)
-    if err != nil {
-        fmt.Printf("Error validating token: %v\n", err)
-        return
-    }
-
-    fmt.Printf("Token validated for user: %s (ID: %d)\n", claims.Username, claims.UserID)
-}package middleware
-
-import (
-    "net/http"
-    "strings"
-    "github.com/dgrijalva/jwt-go"
-)
-
-type Claims struct {
-    Username string `json:"username"`
-    Role     string `json:"role"`
-    jwt.StandardClaims
-}
-
-func AuthMiddleware(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        authHeader := r.Header.Get("Authorization")
-        if authHeader == "" {
-            http.Error(w, "Authorization header required", http.StatusUnauthorized)
-            return
-        }
-
-        tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-        if tokenString == authHeader {
-            http.Error(w, "Bearer token required", http.StatusUnauthorized)
-            return
-        }
-
-        claims := &Claims{}
-        token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-            return []byte("your-secret-key"), nil
+            r.Header.Set("X-Username", claims.Username)
+            r.Header.Set("X-Role", claims.Role)
+            next.ServeHTTP(w, r)
         })
-
-        if err != nil || !token.Valid {
-            http.Error(w, "Invalid token", http.StatusUnauthorized)
-            return
-        }
-
-        r.Header.Set("X-Username", claims.Username)
-        r.Header.Set("X-Role", claims.Role)
-        next.ServeHTTP(w, r)
-    })
+    }
 }
