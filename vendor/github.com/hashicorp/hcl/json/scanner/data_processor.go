@@ -96,3 +96,70 @@ func ValidateRecord(r Record) error {
     }
     return nil
 }
+package main
+
+import (
+	"fmt"
+	"strings"
+	"unicode"
+)
+
+func NormalizeUsername(input string) (string, error) {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return "", fmt.Errorf("username cannot be empty")
+	}
+
+	var normalized strings.Builder
+	for _, r := range trimmed {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '-' {
+			normalized.WriteRune(unicode.ToLower(r))
+		} else {
+			return "", fmt.Errorf("invalid character in username: %c", r)
+		}
+	}
+
+	result := normalized.String()
+	if len(result) < 3 {
+		return "", fmt.Errorf("username must be at least 3 characters")
+	}
+	if len(result) > 20 {
+		return "", fmt.Errorf("username cannot exceed 20 characters")
+	}
+
+	return result, nil
+}
+
+func ValidateEmail(email string) bool {
+	if !strings.Contains(email, "@") {
+		return false
+	}
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		return false
+	}
+	if parts[0] == "" || parts[1] == "" {
+		return false
+	}
+	if !strings.Contains(parts[1], ".") {
+		return false
+	}
+	return true
+}
+
+func main() {
+	usernames := []string{"User_123", "  test  ", "ab", "invalid@name", "verylongusernameexceedinglimit"}
+	for _, u := range usernames {
+		normalized, err := NormalizeUsername(u)
+		if err != nil {
+			fmt.Printf("Error for '%s': %v\n", u, err)
+		} else {
+			fmt.Printf("Original: '%s' -> Normalized: '%s'\n", u, normalized)
+		}
+	}
+
+	emails := []string{"test@example.com", "invalid", "user@", "@domain.com", "user@domain"}
+	for _, e := range emails {
+		fmt.Printf("Email '%s' valid: %v\n", e, ValidateEmail(e))
+	}
+}
