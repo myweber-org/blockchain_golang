@@ -115,4 +115,32 @@ func CalculateStatistics(records []DataRecord) (float64, float64, int) {
 	}
 
 	return average, maxValue, validCount
+}package utils
+
+import (
+	"regexp"
+	"strings"
+)
+
+// SanitizeInput removes potentially harmful characters and trims whitespace
+func SanitizeInput(input string) string {
+	// Trim leading and trailing whitespace
+	trimmed := strings.TrimSpace(input)
+	
+	// Remove any HTML/XML tags
+	re := regexp.MustCompile(`<[^>]*>`)
+	cleaned := re.ReplaceAllString(trimmed, "")
+	
+	// Escape potentially dangerous characters
+	re = regexp.MustCompile(`[;&|$]`)
+	escaped := re.ReplaceAllString(cleaned, "")
+	
+	return escaped
+}
+
+// ValidateEmail checks if a string is a valid email format
+func ValidateEmail(email string) bool {
+	pattern := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
+	re := regexp.MustCompile(pattern)
+	return re.MatchString(email)
 }
