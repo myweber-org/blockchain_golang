@@ -1,77 +1,83 @@
 package config
 
 import (
-	"encoding/json"
+	"errors"
+	"io"
 	"os"
-	"sync"
+
+	"gopkg.in/yaml.v3"
 )
+
+type DatabaseConfig struct {
+	Host     string `yaml:"host"`
+	Port     int    `yaml:"port"`
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+	Database string `yaml:"database"`
+}
+
+type ServerConfig struct {
+	Port         int    `yaml:"port"`
+	ReadTimeout  int    `yaml:"read_timeout"`
+	WriteTimeout int    `yaml:"write_timeout"`
+	DebugMode    bool   `yaml:"debug_mode"`
+	LogLevel     string `yaml:"log_level"`
+}
 
 type AppConfig struct {
-	ServerPort string `json:"server_port"`
-	DBHost     string `json:"db_host"`
-	DBPort     int    `json:"db_port"`
-	DebugMode  bool   `json:"debug_mode"`
+	Server   ServerConfig   `yaml:"server"`
+	Database DatabaseConfig `yaml:"database"`
 }
 
-var (
-	config     *AppConfig
-	configOnce sync.Once
-)
+func LoadConfigFromFile(filepath string) (*AppConfig, error) {
+	file, err := os.Open(filepath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
 
-func LoadConfig() *AppConfig {
-	configOnce.Do(func() {
-		configFile := os.Getenv("CONFIG_FILE")
-		if configFile == "" {
-			configFile = "config.json"
+	return LoadConfig(file)
+}
+
+func LoadConfig(reader io.Reader) (*AppConfig, error) {
+	var config AppConfig
+	decoder := yaml.NewDecoder(reader)
+	err := decoder.Decode(&config)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := validateConfig(&config); err != nil {
+		return nil, err
+	}
+
+	return &config, nil
+}
+
+func validateConfig(config *AppConfig) error {
+	if config.Server.Port <= 0 || config.Server.Port > 65535 {
+		return errors.New("server port must be between 1 and 65535")
+	}
+
+	if config.Database.Host == "" {
+		return errors.New("database host cannot be empty")
+	}
+
+	if config.Database.Port <= 0 || config.Database.Port > 65535 {
+		return errors.New("database port must be between 1 and 65535")
+	}
+
+	if config.Server.LogLevel != "" {
+		validLevels := map[string]bool{
+			"debug": true,
+			"info":  true,
+			"warn":  true,
+			"error": true,
 		}
-
-		file, err := os.Open(configFile)
-		if err != nil {
-			config = loadFromEnv()
-			return
+		if !validLevels[config.Server.LogLevel] {
+			return errors.New("invalid log level")
 		}
-		defer file.Close()
-
-		decoder := json.NewDecoder(file)
-		if err := decoder.Decode(&config); err != nil {
-			config = loadFromEnv()
-		}
-	})
-	return config
-}
-
-func loadFromEnv() *AppConfig {
-	return &AppConfig{
-		ServerPort: getEnv("SERVER_PORT", "8080"),
-		DBHost:     getEnv("DB_HOST", "localhost"),
-		DBPort:     getEnvAsInt("DB_PORT", 5432),
-		DebugMode:  getEnvAsBool("DEBUG_MODE", false),
 	}
-}
 
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
-
-func getEnvAsInt(key string, defaultValue int) int {
-	valueStr := os.Getenv(key)
-	if valueStr == "" {
-		return defaultValue
-	}
-	var result int
-	if _, err := fmt.Sscanf(valueStr, "%d", &result); err != nil {
-		return defaultValue
-	}
-	return result
-}
-
-func getEnvAsBool(key string, defaultValue bool) bool {
-	valueStr := os.Getenv(key)
-	if valueStr == "" {
-		return defaultValue
-	}
-	return valueStr == "true" || valueStr == "1" || valueStr == "yes"
+	return nil
 }
