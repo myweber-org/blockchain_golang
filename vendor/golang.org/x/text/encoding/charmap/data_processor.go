@@ -67,3 +67,43 @@ func main() {
 
 	fmt.Printf("Processed user: %+v\n", processed)
 }
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "strings"
+)
+
+func FormatJSON(input string) (string, error) {
+    var data interface{}
+    err := json.Unmarshal([]byte(input), &data)
+    if err != nil {
+        return "", fmt.Errorf("invalid JSON: %w", err)
+    }
+
+    formatted, err := json.MarshalIndent(data, "", "  ")
+    if err != nil {
+        return "", fmt.Errorf("failed to format JSON: %w", err)
+    }
+
+    return string(formatted), nil
+}
+
+func ValidateJSON(input string) bool {
+    var js json.RawMessage
+    return json.Unmarshal([]byte(input), &js) == nil
+}
+
+func main() {
+    sample := `{"name":"test","value":123,"active":true}`
+    fmt.Println("Is valid?", ValidateJSON(sample))
+
+    formatted, err := FormatJSON(sample)
+    if err != nil {
+        fmt.Println("Error:", err)
+        return
+    }
+    fmt.Println("Formatted JSON:")
+    fmt.Println(formatted)
+}
