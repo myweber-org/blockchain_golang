@@ -1,23 +1,23 @@
-package utils
+package main
 
-import (
-	"regexp"
-	"strings"
-)
+import "fmt"
 
-// SanitizeInput cleans user-provided strings by trimming whitespace
-// and removing potentially dangerous special characters
-func SanitizeInput(input string) string {
-	// Trim leading and trailing whitespace
-	trimmed := strings.TrimSpace(input)
-	
-	// Remove any non-alphanumeric characters except spaces and basic punctuation
-	reg := regexp.MustCompile(`[^a-zA-Z0-9\s.,!?-]`)
-	cleaned := reg.ReplaceAllString(trimmed, "")
-	
-	// Replace multiple spaces with single space
-	spaceReg := regexp.MustCompile(`\s+`)
-	final := spaceReg.ReplaceAllString(cleaned, " ")
-	
-	return final
+func RemoveDuplicates(input []string) []string {
+	seen := make(map[string]bool)
+	result := []string{}
+
+	for _, item := range input {
+		if !seen[item] {
+			seen[item] = true
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+func main() {
+	data := []string{"apple", "banana", "apple", "orange", "banana", "grape"}
+	cleaned := RemoveDuplicates(data)
+	fmt.Println("Original:", data)
+	fmt.Println("Cleaned:", cleaned)
 }
