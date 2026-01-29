@@ -1,29 +1,60 @@
 
 package main
 
-import "fmt"
+import (
+    "fmt"
+    "strings"
+)
 
-func RemoveDuplicates[T comparable](slice []T) []T {
-	seen := make(map[T]bool)
-	result := []T{}
+type DataRecord struct {
+    ID    int
+    Email string
+    Phone string
+}
 
-	for _, item := range slice {
-		if !seen[item] {
-			seen[item] = true
-			result = append(result, item)
-		}
-	}
-	return result
+func DeduplicateRecords(records []DataRecord) []DataRecord {
+    seen := make(map[string]bool)
+    var unique []DataRecord
+
+    for _, record := range records {
+        key := fmt.Sprintf("%s|%s", record.Email, record.Phone)
+        if !seen[key] {
+            seen[key] = true
+            unique = append(unique, record)
+        }
+    }
+    return unique
+}
+
+func ValidateEmail(email string) bool {
+    return strings.Contains(email, "@") && strings.Contains(email, ".")
+}
+
+func ValidatePhone(phone string) bool {
+    return len(phone) >= 10 && len(phone) <= 15
+}
+
+func CleanData(records []DataRecord) []DataRecord {
+    var cleaned []DataRecord
+    uniqueRecords := DeduplicateRecords(records)
+
+    for _, record := range uniqueRecords {
+        if ValidateEmail(record.Email) && ValidatePhone(record.Phone) {
+            cleaned = append(cleaned, record)
+        }
+    }
+    return cleaned
 }
 
 func main() {
-	numbers := []int{1, 2, 2, 3, 4, 4, 5}
-	uniqueNumbers := RemoveDuplicates(numbers)
-	fmt.Println("Original:", numbers)
-	fmt.Println("Unique:", uniqueNumbers)
+    sampleData := []DataRecord{
+        {1, "test@example.com", "1234567890"},
+        {2, "invalid-email", "9876543210"},
+        {3, "test@example.com", "1234567890"},
+        {4, "another@test.org", "5551234567"},
+    }
 
-	strings := []string{"apple", "banana", "apple", "orange"}
-	uniqueStrings := RemoveDuplicates(strings)
-	fmt.Println("Original:", strings)
-	fmt.Println("Unique:", uniqueStrings)
+    cleaned := CleanData(sampleData)
+    fmt.Printf("Original: %d records\n", len(sampleData))
+    fmt.Printf("Cleaned: %d records\n", len(cleaned))
 }
