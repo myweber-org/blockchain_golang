@@ -7,40 +7,56 @@ import (
 	"log"
 )
 
-// ValidateJSON checks if the provided byte slice contains valid JSON.
-func ValidateJSON(data []byte) (bool, error) {
-	var js interface{}
-	err := json.Unmarshal(data, &js)
-	if err != nil {
-		return false, fmt.Errorf("invalid JSON: %w", err)
-	}
-	return true, nil
+type UserData struct {
+	ID        int    `json:"id"`
+	Username  string `json:"username"`
+	Email     string `json:"email"`
+	Active    bool   `json:"active"`
+	Score     float64 `json:"score"`
 }
 
-// ParseJSONToMap parses JSON data into a map[string]interface{}.
-func ParseJSONToMap(data []byte) (map[string]interface{}, error) {
-	var result map[string]interface{}
-	err := json.Unmarshal(data, &result)
+func ValidateJSON(raw []byte) (*UserData, error) {
+	var data UserData
+	err := json.Unmarshal(raw, &data)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}
-	return result, nil
+
+	if data.Username == "" {
+		return nil, fmt.Errorf("username cannot be empty")
+	}
+	if data.Email == "" {
+		return nil, fmt.Errorf("email cannot be empty")
+	}
+	if data.Score < 0 || data.Score > 100 {
+		return nil, fmt.Errorf("score must be between 0 and 100")
+	}
+
+	return &data, nil
+}
+
+func ProcessUserData(jsonStr string) {
+	userData, err := ValidateJSON([]byte(jsonStr))
+	if err != nil {
+		log.Printf("Validation error: %v", err)
+		return
+	}
+
+	fmt.Printf("User ID: %d\n", userData.ID)
+	fmt.Printf("Username: %s\n", userData.Username)
+	fmt.Printf("Email: %s\n", userData.Email)
+	fmt.Printf("Active: %t\n", userData.Active)
+	fmt.Printf("Score: %.2f\n", userData.Score)
 }
 
 func main() {
-	jsonData := `{"name": "test", "value": 42, "active": true}`
+	sampleJSON := `{
+		"id": 42,
+		"username": "john_doe",
+		"email": "john@example.com",
+		"active": true,
+		"score": 85.5
+	}`
 
-	valid, err := ValidateJSON([]byte(jsonData))
-	if err != nil {
-		log.Printf("Validation error: %v", err)
-	} else {
-		fmt.Println("JSON is valid:", valid)
-	}
-
-	parsedMap, err := ParseJSONToMap([]byte(jsonData))
-	if err != nil {
-		log.Printf("Parse error: %v", err)
-	} else {
-		fmt.Printf("Parsed data: %+v\n", parsedMap)
-	}
+	ProcessUserData(sampleJSON)
 }
