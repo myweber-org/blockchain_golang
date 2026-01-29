@@ -1,141 +1,85 @@
 package config
 
 import (
+	"errors"
 	"os"
-	"path/filepath"
-
-	"gopkg.in/yaml.v3"
+	"strconv"
+	"strings"
 )
 
 type Config struct {
-	Server struct {
-		Host string `yaml:"host" env:"SERVER_HOST"`
-		Port int    `yaml:"port" env:"SERVER_PORT"`
-	} `yaml:"server"`
-	Database struct {
-		Host     string `yaml:"host" env:"DB_HOST"`
-		Port     int    `yaml:"port" env:"DB_PORT"`
-		Name     string `yaml:"name" env:"DB_NAME"`
-		User     string `yaml:"user" env:"DB_USER"`
-		Password string `yaml:"password" env:"DB_PASSWORD"`
-		SSLMode  string `yaml:"ssl_mode" env:"DB_SSL_MODE"`
-	} `yaml:"database"`
-	Logging struct {
-		Level  string `yaml:"level" env:"LOG_LEVEL"`
-		Format string `yaml:"format" env:"LOG_FORMAT"`
-	} `yaml:"logging"`
+	ServerPort int
+	DBHost     string
+	DBPort     int
+	DebugMode  bool
+	APIKeys    []string
 }
 
-func LoadConfig(configPath string) (*Config, error) {
-	absPath, err := filepath.Abs(configPath)
+func LoadConfig() (*Config, error) {
+	cfg := &Config{}
+	var err error
+
+	cfg.ServerPort, err = getEnvInt("SERVER_PORT", 8080)
 	if err != nil {
 		return nil, err
 	}
 
-	data, err := os.ReadFile(absPath)
+	cfg.DBHost = getEnvString("DB_HOST", "localhost")
+	
+	cfg.DBPort, err = getEnvInt("DB_PORT", 5432)
 	if err != nil {
 		return nil, err
 	}
 
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	cfg.DebugMode, err = getEnvBool("DEBUG_MODE", false)
+	if err != nil {
 		return nil, err
 	}
 
-	overrideFromEnv(&cfg)
+	apiKeysStr := getEnvString("API_KEYS", "")
+	if apiKeysStr != "" {
+		cfg.APIKeys = strings.Split(apiKeysStr, ",")
+		for i, key := range cfg.APIKeys {
+			cfg.APIKeys[i] = strings.TrimSpace(key)
+		}
+	}
 
-	return &cfg, nil
+	if cfg.ServerPort < 1 || cfg.ServerPort > 65535 {
+		return nil, errors.New("invalid server port range")
+	}
+
+	if cfg.DBPort < 1 || cfg.DBPort > 65535 {
+		return nil, errors.New("invalid database port range")
+	}
+
+	return cfg, nil
 }
 
-func overrideFromEnv(cfg *Config) {
-	cfg.Server.Host = getEnvOrDefault("SERVER_HOST", cfg.Server.Host)
-	cfg.Server.Port = getEnvIntOrDefault("SERVER_PORT", cfg.Server.Port)
-
-	cfg.Database.Host = getEnvOrDefault("DB_HOST", cfg.Database.Host)
-	cfg.Database.Port = getEnvIntOrDefault("DB_PORT", cfg.Database.Port)
-	cfg.Database.Name = getEnvOrDefault("DB_NAME", cfg.Database.Name)
-	cfg.Database.User = getEnvOrDefault("DB_USER", cfg.Database.User)
-	cfg.Database.Password = getEnvOrDefault("DB_PASSWORD", cfg.Database.Password)
-	cfg.Database.SSLMode = getEnvOrDefault("DB_SSL_MODE", cfg.Database.SSLMode)
-
-	cfg.Logging.Level = getEnvOrDefault("LOG_LEVEL", cfg.Logging.Level)
-	cfg.Logging.Format = getEnvOrDefault("LOG_FORMAT", cfg.Logging.Format)
-}
-
-func getEnvOrDefault(key, defaultValue string) string {
+func getEnvString(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
 	}
 	return defaultValue
 }
 
-func getEnvIntOrDefault(key string, defaultValue int) int {
+func getEnvInt(key string, defaultValue int) (int, error) {
 	if value := os.Getenv(key); value != "" {
-		var result int
-		if _, err := fmt.Sscanf(value, "%d", &result); err == nil {
-			return result
+		intValue, err := strconv.Atoi(value)
+		if err != nil {
+			return 0, errors.New("invalid integer value for " + key)
 		}
+		return intValue, nil
 	}
-	return defaultValue
-}package config
-
-import (
-    "os"
-    "strconv"
-    "strings"
-)
-
-type Config struct {
-    DatabaseURL  string
-    MaxConnections int
-    DebugMode    bool
-    AllowedHosts []string
+	return defaultValue, nil
 }
 
-func Load() (*Config, error) {
-    cfg := &Config{
-        DatabaseURL:  getEnv("DB_URL", "postgres://localhost:5432/app"),
-        MaxConnections: getEnvAsInt("MAX_CONNECTIONS", 10),
-        DebugMode:    getEnvAsBool("DEBUG_MODE", false),
-        AllowedHosts: getEnvAsSlice("ALLOWED_HOSTS", []string{"localhost"}),
-    }
-    return cfg, nil
-}
-
-func getEnv(key, defaultValue string) string {
-    if value, exists := os.LookupEnv(key); exists {
-        return value
-    }
-    return defaultValue
-}
-
-func getEnvAsInt(key string, defaultValue int) int {
-    strValue := getEnv(key, "")
-    if strValue == "" {
-        return defaultValue
-    }
-    if value, err := strconv.Atoi(strValue); err == nil {
-        return value
-    }
-    return defaultValue
-}
-
-func getEnvAsBool(key string, defaultValue bool) bool {
-    strValue := getEnv(key, "")
-    if strValue == "" {
-        return defaultValue
-    }
-    value, err := strconv.ParseBool(strValue)
-    if err != nil {
-        return defaultValue
-    }
-    return value
-}
-
-func getEnvAsSlice(key string, defaultValue []string) []string {
-    strValue := getEnv(key, "")
-    if strValue == "" {
-        return defaultValue
-    }
-    return strings.Split(strValue, ",")
+func getEnvBool(key string, defaultValue bool) (bool, error) {
+	if value := os.Getenv(key); value != "" {
+		boolValue, err := strconv.ParseBool(value)
+		if err != nil {
+			return false, errors.New("invalid boolean value for " + key)
+		}
+		return boolValue, nil
+	}
+	return defaultValue, nil
 }
