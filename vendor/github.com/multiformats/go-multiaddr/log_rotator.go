@@ -155,4 +155,64 @@ func main() {
 		logger.Write([]byte(msg))
 		time.Sleep(10 * time.Millisecond)
 	}
+}package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+)
+
+type LogRotator struct {
+	CurrentLogPath string
+	MaxSize        int64
+	ArchiveDir     string
+}
+
+func NewLogRotator(logPath string, maxSize int64, archiveDir string) *LogRotator {
+	return &LogRotator{
+		CurrentLogPath: logPath,
+		MaxSize:        maxSize,
+		ArchiveDir:     archiveDir,
+	}
+}
+
+func (lr *LogRotator) CheckAndRotate() error {
+	info, err := os.Stat(lr.CurrentLogPath)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to stat log file: %w", err)
+	}
+
+	if info.Size() < lr.MaxSize {
+		return nil
+	}
+
+	timestamp := time.Now().Format("20060102_150405")
+	archiveName := filepath.Base(lr.CurrentLogPath) + "." + timestamp
+	archivePath := filepath.Join(lr.ArchiveDir, archiveName)
+
+	if err := os.Rename(lr.CurrentLogPath, archivePath); err != nil {
+		return fmt.Errorf("failed to archive log file: %w", err)
+	}
+
+	newFile, err := os.Create(lr.CurrentLogPath)
+	if err != nil {
+		return fmt.Errorf("failed to create new log file: %w", err)
+	}
+	newFile.Close()
+
+	fmt.Printf("Log rotated: %s -> %s\n", lr.CurrentLogPath, archivePath)
+	return nil
+}
+
+func main() {
+	rotator := NewLogRotator("/var/log/myapp/app.log", 10*1024*1024, "/var/log/myapp/archive")
+	if err := rotator.CheckAndRotate(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error rotating logs: %v\n", err)
+		os.Exit(1)
+	}
 }
