@@ -1,80 +1,58 @@
+
 package main
 
 import (
-	"encoding/csv"
 	"fmt"
-	"io"
-	"os"
 	"strings"
 )
 
-func cleanCSV(inputPath, outputPath string) error {
-	inFile, err := os.Open(inputPath)
-	if err != nil {
-		return fmt.Errorf("failed to open input file: %w", err)
-	}
-	defer inFile.Close()
+type DataRecord struct {
+	ID    int
+	Email string
+	Valid bool
+}
 
-	outFile, err := os.Create(outputPath)
-	if err != nil {
-		return fmt.Errorf("failed to create output file: %w", err)
-	}
-	defer outFile.Close()
+func deduplicateRecords(records []DataRecord) []DataRecord {
+	seen := make(map[string]bool)
+	var unique []DataRecord
 
-	reader := csv.NewReader(inFile)
-	writer := csv.NewWriter(outFile)
-	defer writer.Flush()
-
-	for {
-		record, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("error reading CSV: %w", err)
-		}
-
-		cleaned := make([]string, len(record))
-		for i, field := range record {
-			cleaned[i] = strings.TrimSpace(field)
-		}
-		if err := writer.Write(cleaned); err != nil {
-			return fmt.Errorf("error writing CSV: %w", err)
+	for _, record := range records {
+		email := strings.ToLower(strings.TrimSpace(record.Email))
+		if !seen[email] {
+			seen[email] = true
+			record.Email = email
+			unique = append(unique, record)
 		}
 	}
-	return nil
+	return unique
+}
+
+func validateEmails(records []DataRecord) []DataRecord {
+	for i := range records {
+		records[i].Valid = strings.Contains(records[i].Email, "@") &&
+			len(records[i].Email) > 3
+	}
+	return records
+}
+
+func processData(records []DataRecord) []DataRecord {
+	records = deduplicateRecords(records)
+	records = validateEmails(records)
+	return records
 }
 
 func main() {
-	if len(os.Args) != 3 {
-		fmt.Println("Usage: data_cleaner <input.csv> <output.csv>")
-		os.Exit(1)
+	sampleData := []DataRecord{
+		{1, "user@example.com", false},
+		{2, "USER@example.com", false},
+		{3, "invalid-email", false},
+		{4, "test@domain.org", false},
 	}
-	if err := cleanCSV(os.Args[1], os.Args[2]); err != nil {
-		fmt.Printf("Error: %v\n", err)
-		os.Exit(1)
+
+	processed := processData(sampleData)
+
+	for _, record := range processed {
+		fmt.Printf("ID: %d, Email: %s, Valid: %t\n",
+			record.ID, record.Email, record.Valid)
 	}
-	fmt.Println("CSV cleaning completed successfully")
-}package main
-
-import "fmt"
-
-func removeDuplicates(input []string) []string {
-	seen := make(map[string]struct{})
-	result := make([]string, 0, len(input))
-
-	for _, item := range input {
-		if _, exists := seen[item]; !exists {
-			seen[item] = struct{}{}
-			result = append(result, item)
-		}
-	}
-	return result
-}
-
-func main() {
-	data := []string{"apple", "banana", "apple", "orange", "banana", "grape"}
-	cleaned := removeDuplicates(data)
-	fmt.Println("Original:", data)
-	fmt.Println("Cleaned:", cleaned)
 }
