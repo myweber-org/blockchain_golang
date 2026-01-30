@@ -18,9 +18,9 @@ type DatabaseConfig struct {
 
 type ServerConfig struct {
     Port         int    `yaml:"port" env:"SERVER_PORT"`
-    ReadTimeout  int    `yaml:"read_timeout" env:"SERVER_READ_TIMEOUT"`
-    WriteTimeout int    `yaml:"write_timeout" env:"SERVER_WRITE_TIMEOUT"`
-    DebugMode    bool   `yaml:"debug_mode" env:"SERVER_DEBUG"`
+    ReadTimeout  int    `yaml:"read_timeout" env:"READ_TIMEOUT"`
+    WriteTimeout int    `yaml:"write_timeout" env:"WRITE_TIMEOUT"`
+    DebugMode    bool   `yaml:"debug_mode" env:"DEBUG_MODE"`
 }
 
 type AppConfig struct {
@@ -45,18 +45,46 @@ func LoadConfig(configPath string) (*AppConfig, error) {
 }
 
 func overrideFromEnv(config *AppConfig) {
-    // Implementation would read environment variables
-    // and override corresponding fields in config
-    // This is a simplified placeholder
-    if envPort := os.Getenv("SERVER_PORT"); envPort != "" {
-        // Parse and set config.Server.Port
+    setFieldFromEnv(&config.Database.Host, "DB_HOST")
+    setFieldFromEnv(&config.Database.Port, "DB_PORT")
+    setFieldFromEnv(&config.Database.Username, "DB_USER")
+    setFieldFromEnv(&config.Database.Password, "DB_PASS")
+    setFieldFromEnv(&config.Database.Name, "DB_NAME")
+    
+    setFieldFromEnv(&config.Server.Port, "SERVER_PORT")
+    setFieldFromEnv(&config.Server.ReadTimeout, "READ_TIMEOUT")
+    setFieldFromEnv(&config.Server.WriteTimeout, "WRITE_TIMEOUT")
+    setFieldFromEnv(&config.Server.DebugMode, "DEBUG_MODE")
+    
+    setFieldFromEnv(&config.LogLevel, "LOG_LEVEL")
+}
+
+func setFieldFromEnv(field interface{}, envVar string) {
+    if val := os.Getenv(envVar); val != "" {
+        switch v := field.(type) {
+        case *string:
+            *v = val
+        case *int:
+            fmt.Sscanf(val, "%d", v)
+        case *bool:
+            *v = val == "true" || val == "1"
+        }
     }
 }
 
 func DefaultConfigPath() string {
-    homeDir, err := os.UserHomeDir()
-    if err != nil {
-        return "./config.yaml"
+    paths := []string{
+        "config.yaml",
+        "config/config.yaml",
+        "/etc/app/config.yaml",
     }
-    return filepath.Join(homeDir, ".app", "config.yaml")
+    
+    for _, path := range paths {
+        if _, err := os.Stat(path); err == nil {
+            absPath, _ := filepath.Abs(path)
+            return absPath
+        }
+    }
+    
+    return ""
 }
