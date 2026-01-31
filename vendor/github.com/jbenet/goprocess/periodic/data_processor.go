@@ -3,19 +3,26 @@ package main
 
 import "fmt"
 
-func calculateAverage(numbers []int) float64 {
-    if len(numbers) == 0 {
-        return 0
+func movingAverage(data []float64, windowSize int) []float64 {
+    if windowSize <= 0 || len(data) == 0 {
+        return []float64{}
     }
-    sum := 0
-    for _, num := range numbers {
-        sum += num
+
+    result := make([]float64, 0, len(data)-windowSize+1)
+    for i := 0; i <= len(data)-windowSize; i++ {
+        sum := 0.0
+        for j := i; j < i+windowSize; j++ {
+            sum += data[j]
+        }
+        average := sum / float64(windowSize)
+        result = append(result, average)
     }
-    return float64(sum) / float64(len(numbers))
+    return result
 }
 
 func main() {
-    data := []int{10, 20, 30, 40, 50}
-    avg := calculateAverage(data)
-    fmt.Printf("Average: %.2f\n", avg)
+    sampleData := []float64{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0}
+    window := 3
+    averages := movingAverage(sampleData, window)
+    fmt.Printf("Moving averages (window=%d): %v\n", window, averages)
 }
