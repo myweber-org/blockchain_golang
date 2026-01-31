@@ -1,7 +1,6 @@
 package config
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 
@@ -27,10 +26,6 @@ type Config struct {
 }
 
 func LoadConfig(configPath string) (*Config, error) {
-	if configPath == "" {
-		configPath = "config.yaml"
-	}
-
 	absPath, err := filepath.Abs(configPath)
 	if err != nil {
 		return nil, err
@@ -46,67 +41,33 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, err
 	}
 
-	if err := overrideFromEnv(&cfg); err != nil {
-		return nil, err
-	}
-
-	if err := validateConfig(&cfg); err != nil {
-		return nil, err
-	}
-
+	overrideFromEnv(&cfg)
 	return &cfg, nil
 }
 
-func overrideFromEnv(cfg *Config) error {
-	envMap := map[string]*string{
-		"SERVER_HOST":     &cfg.Server.Host,
-		"DB_HOST":         &cfg.Database.Host,
-		"DB_NAME":         &cfg.Database.Name,
-		"DB_USER":         &cfg.Database.User,
-		"DB_PASSWORD":     &cfg.Database.Password,
-		"LOG_LEVEL":       &cfg.Logging.Level,
-		"LOG_OUTPUT":      &cfg.Logging.Output,
-	}
-
-	for envVar, field := range envMap {
-		if val, exists := os.LookupEnv(envVar); exists && val != "" {
-			*field = val
-		}
-	}
-
-	if portStr, exists := os.LookupEnv("SERVER_PORT"); exists && portStr != "" {
-		if port, err := parseInt(portStr); err == nil {
-			cfg.Server.Port = port
-		}
-	}
-
-	if portStr, exists := os.LookupEnv("DB_PORT"); exists && portStr != "" {
-		if port, err := parseInt(portStr); err == nil {
-			cfg.Database.Port = port
-		}
-	}
-
-	return nil
+func overrideFromEnv(cfg *Config) {
+	overrideString(&cfg.Server.Host, "SERVER_HOST")
+	overrideInt(&cfg.Server.Port, "SERVER_PORT")
+	overrideString(&cfg.Database.Host, "DB_HOST")
+	overrideInt(&cfg.Database.Port, "DB_PORT")
+	overrideString(&cfg.Database.Name, "DB_NAME")
+	overrideString(&cfg.Database.User, "DB_USER")
+	overrideString(&cfg.Database.Password, "DB_PASSWORD")
+	overrideString(&cfg.Logging.Level, "LOG_LEVEL")
+	overrideString(&cfg.Logging.Output, "LOG_OUTPUT")
 }
 
-func validateConfig(cfg *Config) error {
-	if cfg.Server.Host == "" {
-		return errors.New("server host cannot be empty")
+func overrideString(field *string, envVar string) {
+	if val := os.Getenv(envVar); val != "" {
+		*field = val
 	}
-	if cfg.Server.Port <= 0 || cfg.Server.Port > 65535 {
-		return errors.New("server port must be between 1 and 65535")
-	}
-	if cfg.Database.Host == "" {
-		return errors.New("database host cannot be empty")
-	}
-	if cfg.Database.Name == "" {
-		return errors.New("database name cannot be empty")
-	}
-	return nil
 }
 
-func parseInt(s string) (int, error) {
-	var result int
-	_, err := fmt.Sscanf(s, "%d", &result)
-	return result, err
+func overrideInt(field *int, envVar string) {
+	if val := os.Getenv(envVar); val != "" {
+		var intVal int
+		if _, err := fmt.Sscanf(val, "%d", &intVal); err == nil {
+			*field = intVal
+		}
+	}
 }
