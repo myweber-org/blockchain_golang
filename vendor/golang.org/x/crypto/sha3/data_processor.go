@@ -1,76 +1,101 @@
-
 package main
 
 import (
-	"errors"
+	"encoding/csv"
 	"fmt"
+	"io"
+	"os"
+	"strconv"
 	"strings"
-	"time"
 )
 
 type DataRecord struct {
-	ID        string
-	Value     float64
-	Timestamp time.Time
-	Tags      []string
+	ID    int
+	Name  string
+	Value float64
+	Valid bool
 }
 
-func ValidateRecord(record DataRecord) error {
-	if record.ID == "" {
-		return errors.New("ID cannot be empty")
-	}
-	if record.Value < 0 {
-		return errors.New("value must be non-negative")
-	}
-	if record.Timestamp.IsZero() {
-		return errors.New("timestamp must be set")
-	}
-	return nil
-}
-
-func TransformRecord(record DataRecord, multiplier float64) DataRecord {
-	return DataRecord{
-		ID:        strings.ToUpper(record.ID),
-		Value:     record.Value * multiplier,
-		Timestamp: record.Timestamp.UTC(),
-		Tags:      append(record.Tags, "processed"),
-	}
-}
-
-func ProcessData(records []DataRecord, multiplier float64) ([]DataRecord, error) {
-	var processed []DataRecord
-	for _, record := range records {
-		if err := ValidateRecord(record); err != nil {
-			return nil, fmt.Errorf("validation failed for record %s: %w", record.ID, err)
-		}
-		processed = append(processed, TransformRecord(record, multiplier))
-	}
-	return processed, nil
-}
-
-func main() {
-	records := []DataRecord{
-		{
-			ID:        "rec001",
-			Value:     42.5,
-			Timestamp: time.Now(),
-			Tags:      []string{"test"},
-		},
-		{
-			ID:        "rec002",
-			Value:     18.3,
-			Timestamp: time.Now().Add(-time.Hour),
-			Tags:      []string{"production"},
-		},
-	}
-
-	processed, err := ProcessData(records, 2.0)
+func ParseCSVFile(filename string) ([]DataRecord, error) {
+	file, err := os.Open(filename)
 	if err != nil {
-		fmt.Printf("Processing error: %v\n", err)
-		return
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	records := []DataRecord{}
+	lineNum := 0
+
+	for {
+		lineNum++
+		row, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("csv read error at line %d: %w", lineNum, err)
+		}
+
+		if len(row) < 4 {
+			continue
+		}
+
+		record, parseErr := parseRow(row)
+		if parseErr != nil {
+			fmt.Printf("warning: line %d: %v\n", lineNum, parseErr)
+			continue
+		}
+
+		records = append(records, record)
 	}
 
-	for _, rec := range processed {
-		fmt.Printf("Processed: %+v\n", rec)
+	return records, nil
+}
+
+func parseRow(row []string) (DataRecord, error) {
+	var record DataRecord
+	var err error
+
+	record.ID, err = strconv.Atoi(strings.TrimSpace(row[0]))
+	if err != nil {
+		return record, fmt.Errorf("invalid ID: %w", err)
 	}
+
+	record.Name = strings.TrimSpace(row[1])
+	if record.Name == "" {
+		return record, fmt.Errorf("empty name field")
+	}
+
+	record.Value, err = strconv.ParseFloat(strings.TrimSpace(row[2]), 64)
+	if err != nil {
+		return record, fmt.Errorf("invalid value: %w", err)
+	}
+
+	validStr := strings.ToLower(strings.TrimSpace(row[3]))
+	record.Valid = (validStr == "true" || validStr == "1" || validStr == "yes")
+
+	return record, nil
+}
+
+func FilterValidRecords(records []DataRecord) []DataRecord {
+	validRecords := []DataRecord{}
+	for _, record := range records {
+		if record.Valid {
+			validRecords = append(validRecords, record)
+		}
+	}
+	return validRecords
+}
+
+func CalculateAverage(records []DataRecord) float64 {
+	if len(records) == 0 {
+		return 0.0
+	}
+
+	total := 0.0
+	for _, record := range records {
+		total += record.Value
+	}
+	return total / float64(len(records))
 }
