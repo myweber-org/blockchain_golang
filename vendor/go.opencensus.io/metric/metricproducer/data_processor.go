@@ -2,41 +2,53 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"regexp"
+	"errors"
 	"strings"
+	"time"
 )
 
-func ValidateEmail(email string) bool {
-	pattern := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
-	re := regexp.MustCompile(pattern)
-	return re.MatchString(email)
+type DataRecord struct {
+	ID        string
+	Value     float64
+	Timestamp time.Time
+	Category  string
 }
 
-func TrimAndTitle(s string) string {
-	return strings.Title(strings.TrimSpace(s))
-}
-
-func ToJSON(data interface{}) (string, error) {
-	bytes, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return "", err
+func ValidateRecord(record DataRecord) error {
+	if record.ID == "" {
+		return errors.New("ID cannot be empty")
 	}
-	return string(bytes), nil
+	if record.Value < 0 {
+		return errors.New("value must be non-negative")
+	}
+	if record.Timestamp.IsZero() {
+		return errors.New("timestamp must be set")
+	}
+	if strings.TrimSpace(record.Category) == "" {
+		return errors.New("category cannot be empty")
+	}
+	return nil
 }
 
-func main() {
-	email := "test@example.com"
-	fmt.Printf("Email %s valid: %v\n", email, ValidateEmail(email))
-
-	name := "  john doe  "
-	fmt.Printf("Original: '%s', Processed: '%s'\n", name, TrimAndTitle(name))
-
-	person := map[string]string{
-		"name":  "Alice",
-		"email": "alice@example.com",
+func TransformRecord(record DataRecord, multiplier float64) DataRecord {
+	if multiplier <= 0 {
+		multiplier = 1.0
 	}
-	jsonStr, _ := ToJSON(person)
-	fmt.Println("JSON output:", jsonStr)
+	return DataRecord{
+		ID:        strings.ToUpper(record.ID),
+		Value:     record.Value * multiplier,
+		Timestamp: record.Timestamp.UTC(),
+		Category:  strings.ToLower(strings.TrimSpace(record.Category)),
+	}
+}
+
+func ProcessRecords(records []DataRecord, multiplier float64) ([]DataRecord, error) {
+	var processed []DataRecord
+	for _, record := range records {
+		if err := ValidateRecord(record); err != nil {
+			return nil, err
+		}
+		processed = append(processed, TransformRecord(record, multiplier))
+	}
+	return processed, nil
 }
