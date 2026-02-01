@@ -156,3 +156,124 @@ func main() {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+package main
+
+import (
+    "fmt"
+    "io"
+    "os"
+    "path/filepath"
+    "strconv"
+    "sync"
+)
+
+type RotatingFile struct {
+    mu         sync.Mutex
+    file       *os.File
+    basePath   string
+    maxSize    int64
+    currentSize int64
+    fileIndex  int
+}
+
+func NewRotatingFile(basePath string, maxSize int64) (*RotatingFile, error) {
+    rf := &RotatingFile{
+        basePath:  basePath,
+        maxSize:   maxSize,
+        fileIndex: 0,
+    }
+    
+    if err := rf.openFile(); err != nil {
+        return nil, err
+    }
+    
+    return rf, nil
+}
+
+func (rf *RotatingFile) openFile() error {
+    filename := rf.basePath
+    if rf.fileIndex > 0 {
+        filename = rf.basePath + "." + strconv.Itoa(rf.fileIndex)
+    }
+    
+    file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+    if err != nil {
+        return err
+    }
+    
+    info, err := file.Stat()
+    if err != nil {
+        file.Close()
+        return err
+    }
+    
+    rf.file = file
+    rf.currentSize = info.Size()
+    return nil
+}
+
+func (rf *RotatingFile) rotate() error {
+    rf.file.Close()
+    rf.fileIndex++
+    
+    for i := rf.fileIndex; i > 0; i-- {
+        oldName := rf.basePath
+        if i > 1 {
+            oldName = rf.basePath + "." + strconv.Itoa(i-1)
+        }
+        newName := rf.basePath + "." + strconv.Itoa(i)
+        
+        if _, err := os.Stat(oldName); err == nil {
+            if err := os.Rename(oldName, newName); err != nil {
+                return err
+            }
+        }
+    }
+    
+    return rf.openFile()
+}
+
+func (rf *RotatingFile) Write(p []byte) (int, error) {
+    rf.mu.Lock()
+    defer rf.mu.Unlock()
+    
+    if rf.currentSize+int64(len(p)) > rf.maxSize {
+        if err := rf.rotate(); err != nil {
+            return 0, err
+        }
+    }
+    
+    n, err := rf.file.Write(p)
+    if err == nil {
+        rf.currentSize += int64(n)
+    }
+    return n, err
+}
+
+func (rf *RotatingFile) Close() error {
+    rf.mu.Lock()
+    defer rf.mu.Unlock()
+    
+    if rf.file != nil {
+        return rf.file.Close()
+    }
+    return nil
+}
+
+func main() {
+    logFile, err := NewRotatingFile("app.log", 1024*1024) // 1MB max size
+    if err != nil {
+        fmt.Printf("Failed to create log file: %v\n", err)
+        return
+    }
+    defer logFile.Close()
+    
+    for i := 0; i < 100; i++ {
+        message := fmt.Sprintf("Log entry %d: Application is running normally\n", i)
+        if _, err := logFile.Write([]byte(message)); err != nil {
+            fmt.Printf("Failed to write log: %v\n", err)
+        }
+    }
+    
+    fmt.Println("Log rotation test completed")
+}
