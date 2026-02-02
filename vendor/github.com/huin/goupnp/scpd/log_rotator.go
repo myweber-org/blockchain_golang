@@ -347,3 +347,145 @@ func main() {
         fmt.Printf("Compression error: %v\n", err)
     }
 }
+package main
+
+import (
+	"fmt"
+	"io"
+	"log"
+	"os"
+	"path/filepath"
+	"time"
+)
+
+type RotatingFile struct {
+	MaxSize    int64
+	BackupCount int
+	Compress   bool
+	basePath   string
+	current   *os.File
+	size      int64
+}
+
+func NewRotatingFile(path string, maxSize int64, backupCount int, compress bool) (*RotatingFile, error) {
+	rf := &RotatingFile{
+		MaxSize:     maxSize,
+		BackupCount: backupCount,
+		Compress:    compress,
+		basePath:    path,
+	}
+
+	if err := rf.openCurrent(); err != nil {
+		return nil, err
+	}
+
+	return rf, nil
+}
+
+func (rf *RotatingFile) openCurrent() error {
+	if rf.current != nil {
+		rf.current.Close()
+	}
+
+	f, err := os.OpenFile(rf.basePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+
+	stat, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return err
+	}
+
+	rf.current = f
+	rf.size = stat.Size()
+	return nil
+}
+
+func (rf *RotatingFile) Write(p []byte) (int, error) {
+	if rf.size+int64(len(p)) >= rf.MaxSize {
+		if err := rf.rotate(); err != nil {
+			return 0, err
+		}
+	}
+
+	n, err := rf.current.Write(p)
+	if err == nil {
+		rf.size += int64(n)
+	}
+	return n, err
+}
+
+func (rf *RotatingFile) rotate() error {
+	if err := rf.current.Close(); err != nil {
+		return err
+	}
+
+	timestamp := time.Now().Format("20060102_150405")
+	backupPath := fmt.Sprintf("%s.%s", rf.basePath, timestamp)
+
+	if err := os.Rename(rf.basePath, backupPath); err != nil {
+		return err
+	}
+
+	if rf.Compress {
+		go rf.compressBackup(backupPath)
+	}
+
+	if err := rf.cleanOldBackups(); err != nil {
+		log.Printf("Failed to clean old backups: %v", err)
+	}
+
+	return rf.openCurrent()
+}
+
+func (rf *RotatingFile) compressBackup(path string) {
+	// Compression implementation would go here
+	// For now just log the operation
+	log.Printf("Compressing backup: %s", path)
+}
+
+func (rf *RotatingFile) cleanOldBackups() error {
+	pattern := rf.basePath + ".*"
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return err
+	}
+
+	if len(matches) <= rf.BackupCount {
+		return nil
+	}
+
+	toRemove := matches[:len(matches)-rf.BackupCount]
+	for _, path := range toRemove {
+		if err := os.Remove(path); err != nil {
+			return err
+		}
+		log.Printf("Removed old backup: %s", path)
+	}
+
+	return nil
+}
+
+func (rf *RotatingFile) Close() error {
+	if rf.current != nil {
+		return rf.current.Close()
+	}
+	return nil
+}
+
+func main() {
+	logFile, err := NewRotatingFile("app.log", 1024*1024, 5, true)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer logFile.Close()
+
+	log.SetOutput(io.MultiWriter(os.Stdout, logFile))
+
+	for i := 0; i < 100; i++ {
+		log.Printf("Log entry %d: Application is running normally", i)
+		time.Sleep(10 * time.Millisecond)
+	}
+}
