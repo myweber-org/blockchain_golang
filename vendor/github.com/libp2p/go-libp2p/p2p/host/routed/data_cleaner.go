@@ -1,81 +1,66 @@
+
 package main
-
-import "fmt"
-
-func RemoveDuplicates(input []int) []int {
-	seen := make(map[int]bool)
-	result := []int{}
-
-	for _, value := range input {
-		if !seen[value] {
-			seen[value] = true
-			result = append(result, value)
-		}
-	}
-	return result
-}
-
-func main() {
-	data := []int{1, 2, 2, 3, 4, 4, 5, 1, 6}
-	cleaned := RemoveDuplicates(data)
-	fmt.Printf("Original: %v\n", data)
-	fmt.Printf("Cleaned: %v\n", cleaned)
-}package main
 
 import (
 	"fmt"
 	"strings"
 )
 
-type DataCleaner struct {
-	seen map[string]bool
+type DataRecord struct {
+	ID    int
+	Name  string
+	Email string
+	Valid bool
 }
 
-func NewDataCleaner() *DataCleaner {
-	return &DataCleaner{
-		seen: make(map[string]bool),
-	}
-}
+func RemoveDuplicates(records []DataRecord) []DataRecord {
+	seen := make(map[string]bool)
+	var unique []DataRecord
 
-func (dc *DataCleaner) RemoveDuplicates(items []string) []string {
-	var unique []string
-	for _, item := range items {
-		normalized := strings.ToLower(strings.TrimSpace(item))
-		if !dc.seen[normalized] && dc.isValid(normalized) {
-			dc.seen[normalized] = true
-			unique = append(unique, item)
+	for _, record := range records {
+		key := fmt.Sprintf("%s|%s", record.Name, record.Email)
+		if !seen[key] {
+			seen[key] = true
+			unique = append(unique, record)
 		}
 	}
 	return unique
 }
 
-func (dc *DataCleaner) isValid(item string) bool {
-	return len(item) > 0 && !strings.ContainsAny(item, "!@#$%")
+func ValidateEmail(email string) bool {
+	if !strings.Contains(email, "@") {
+		return false
+	}
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		return false
+	}
+	return len(parts[0]) > 0 && len(parts[1]) > 0
 }
 
-func (dc *DataCleaner) Reset() {
-	dc.seen = make(map[string]bool)
+func CleanData(records []DataRecord) []DataRecord {
+	var cleaned []DataRecord
+	for _, record := range records {
+		if ValidateEmail(record.Email) {
+			record.Valid = true
+			cleaned = append(cleaned, record)
+		}
+	}
+	return RemoveDuplicates(cleaned)
 }
 
 func main() {
-	cleaner := NewDataCleaner()
-	
-	data := []string{
-		"apple",
-		"Apple",
-		"banana",
-		" banana ",
-		"",
-		"cherry!",
-		"cherry",
+	sampleData := []DataRecord{
+		{1, "John Doe", "john@example.com", false},
+		{2, "Jane Smith", "jane@example.com", false},
+		{3, "John Doe", "john@example.com", false},
+		{4, "Bob Wilson", "invalid-email", false},
 	}
-	
-	cleaned := cleaner.RemoveDuplicates(data)
-	fmt.Printf("Original: %v\n", data)
-	fmt.Printf("Cleaned: %v\n", cleaned)
-	fmt.Printf("Count reduced: %d -> %d\n", len(data), len(cleaned))
-	
-	cleaner.Reset()
-	anotherSet := []string{"test", "Test", "TEST"}
-	fmt.Printf("Another set: %v\n", cleaner.RemoveDuplicates(anotherSet))
+
+	cleaned := CleanData(sampleData)
+	fmt.Printf("Original: %d records\n", len(sampleData))
+	fmt.Printf("Cleaned: %d records\n", len(cleaned))
+	for _, r := range cleaned {
+		fmt.Printf("ID: %d, Name: %s, Email: %s, Valid: %v\n", r.ID, r.Name, r.Email, r.Valid)
+	}
 }
