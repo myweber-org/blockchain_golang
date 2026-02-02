@@ -112,4 +112,90 @@ func ValidateConfig(config *Config) error {
 		return errors.New("database name is required")
 	}
 	return nil
+}package config
+
+import (
+	"encoding/json"
+	"errors"
+	"os"
+	"strconv"
+	"strings"
+)
+
+type Config struct {
+	ServerPort int    `json:"server_port"`
+	DBHost     string `json:"db_host"`
+	DBPort     int    `json:"db_port"`
+	DebugMode  bool   `json:"debug_mode"`
+	APIKeys    []string `json:"api_keys"`
+}
+
+func LoadConfig(configPath string) (*Config, error) {
+	config := &Config{
+		ServerPort: 8080,
+		DBHost:     "localhost",
+		DBPort:     5432,
+		DebugMode:  false,
+		APIKeys:    []string{},
+	}
+
+	if configPath != "" {
+		fileData, err := os.ReadFile(configPath)
+		if err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(fileData, config); err != nil {
+			return nil, err
+		}
+	}
+
+	config.overrideFromEnv()
+
+	if err := config.validate(); err != nil {
+		return nil, err
+	}
+
+	return config, nil
+}
+
+func (c *Config) overrideFromEnv() {
+	if portStr := os.Getenv("SERVER_PORT"); portStr != "" {
+		if port, err := strconv.Atoi(portStr); err == nil {
+			c.ServerPort = port
+		}
+	}
+
+	if host := os.Getenv("DB_HOST"); host != "" {
+		c.DBHost = host
+	}
+
+	if portStr := os.Getenv("DB_PORT"); portStr != "" {
+		if port, err := strconv.Atoi(portStr); err == nil {
+			c.DBPort = port
+		}
+	}
+
+	if debugStr := os.Getenv("DEBUG_MODE"); debugStr != "" {
+		c.DebugMode = strings.ToLower(debugStr) == "true"
+	}
+
+	if apiKeysStr := os.Getenv("API_KEYS"); apiKeysStr != "" {
+		c.APIKeys = strings.Split(apiKeysStr, ",")
+	}
+}
+
+func (c *Config) validate() error {
+	if c.ServerPort < 1 || c.ServerPort > 65535 {
+		return errors.New("invalid server port")
+	}
+
+	if c.DBPort < 1 || c.DBPort > 65535 {
+		return errors.New("invalid database port")
+	}
+
+	if c.DBHost == "" {
+		return errors.New("database host cannot be empty")
+	}
+
+	return nil
 }
