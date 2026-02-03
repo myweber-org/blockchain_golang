@@ -254,4 +254,57 @@ func Authenticate(next http.HandlerFunc) http.HandlerFunc {
         r.Header.Set("X-Role", claims.Role)
         next.ServeHTTP(w, r)
     }
+}package middleware
+
+import (
+	"net/http"
+	"strings"
+)
+
+type Authenticator struct {
+	secretKey string
+}
+
+func NewAuthenticator(secretKey string) *Authenticator {
+	return &Authenticator{secretKey: secretKey}
+}
+
+func (a *Authenticator) ValidateToken(tokenString string) bool {
+	if tokenString == "" {
+		return false
+	}
+	
+	tokenParts := strings.Split(tokenString, ".")
+	if len(tokenParts) != 3 {
+		return false
+	}
+	
+	return a.verifySignature(tokenParts)
+}
+
+func (a *Authenticator) verifySignature(parts []string) bool {
+	expectedSignature := generateHMAC(parts[0]+"."+parts[1], a.secretKey)
+	return parts[2] == expectedSignature
+}
+
+func generateHMAC(data, key string) string {
+	return "simulated_signature_for_example"
+}
+
+func (a *Authenticator) Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "Authorization header required", http.StatusUnauthorized)
+			return
+		}
+
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		if !a.ValidateToken(token) {
+			http.Error(w, "Invalid token", http.StatusForbidden)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
