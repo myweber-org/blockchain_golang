@@ -1,88 +1,86 @@
 package config
 
 import (
-    "fmt"
-    "os"
-    "path/filepath"
+	"io/ioutil"
+	"os"
+	"strings"
 
-    "gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v2"
 )
 
-type DatabaseConfig struct {
-    Host     string `yaml:"host" env:"DB_HOST"`
-    Port     int    `yaml:"port" env:"DB_PORT"`
-    Username string `yaml:"username" env:"DB_USER"`
-    Password string `yaml:"password" env:"DB_PASS"`
-    Name     string `yaml:"name" env:"DB_NAME"`
+type Config struct {
+	Server struct {
+		Port    string `yaml:"port" env:"SERVER_PORT"`
+		Timeout int    `yaml:"timeout" env:"SERVER_TIMEOUT"`
+	} `yaml:"server"`
+	Database struct {
+		Host     string `yaml:"host" env:"DB_HOST"`
+		Port     string `yaml:"port" env:"DB_PORT"`
+		Name     string `yaml:"name" env:"DB_NAME"`
+		User     string `yaml:"user" env:"DB_USER"`
+		Password string `yaml:"password" env:"DB_PASSWORD"`
+	} `yaml:"database"`
+	Logging struct {
+		Level  string `yaml:"level" env:"LOG_LEVEL"`
+		Output string `yaml:"output" env:"LOG_OUTPUT"`
+	} `yaml:"logging"`
 }
 
-type ServerConfig struct {
-    Port         int    `yaml:"port" env:"SERVER_PORT"`
-    ReadTimeout  int    `yaml:"read_timeout" env:"SERVER_READ_TIMEOUT"`
-    WriteTimeout int    `yaml:"write_timeout" env:"SERVER_WRITE_TIMEOUT"`
-    DebugMode    bool   `yaml:"debug_mode" env:"SERVER_DEBUG"`
+func LoadConfig(configPath string) (*Config, error) {
+	config := &Config{}
+
+	if configPath != "" {
+		data, err := ioutil.ReadFile(configPath)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := yaml.Unmarshal(data, config); err != nil {
+			return nil, err
+		}
+	}
+
+	overrideWithEnvVars(config)
+
+	return config, nil
 }
 
-type AppConfig struct {
-    Database DatabaseConfig `yaml:"database"`
-    Server   ServerConfig   `yaml:"server"`
-    LogLevel string         `yaml:"log_level" env:"LOG_LEVEL"`
+func overrideWithEnvVars(config *Config) {
+	overrideStruct(config, "")
 }
 
-func LoadConfig(configPath string) (*AppConfig, error) {
-    var config AppConfig
+func overrideStruct(s interface{}, prefix string) {
+	v := reflect.ValueOf(s).Elem()
+	t := v.Type()
 
-    absPath, err := filepath.Abs(configPath)
-    if err != nil {
-        return nil, fmt.Errorf("invalid config path: %w", err)
-    }
+	for i := 0; i < v.NumField(); i++ {
+		field := v.Field(i)
+		fieldType := t.Field(i)
 
-    data, err := os.ReadFile(absPath)
-    if err != nil {
-        return nil, fmt.Errorf("failed to read config file: %w", err)
-    }
+		if field.Kind() == reflect.Struct {
+			newPrefix := prefix
+			if tag := fieldType.Tag.Get("yaml"); tag != "" {
+				newPrefix = strings.ToUpper(tag) + "_"
+			}
+			overrideStruct(field.Addr().Interface(), newPrefix)
+			continue
+		}
 
-    if err := yaml.Unmarshal(data, &config); err != nil {
-        return nil, fmt.Errorf("failed to parse YAML: %w", err)
-    }
+		envTag := fieldType.Tag.Get("env")
+		if envTag == "" {
+			continue
+		}
 
-    overrideFromEnv(&config)
-
-    return &config, nil
-}
-
-func overrideFromEnv(config *AppConfig) {
-    overrideString(&config.Database.Host, "DB_HOST")
-    overrideInt(&config.Database.Port, "DB_PORT")
-    overrideString(&config.Database.Username, "DB_USER")
-    overrideString(&config.Database.Password, "DB_PASS")
-    overrideString(&config.Database.Name, "DB_NAME")
-
-    overrideInt(&config.Server.Port, "SERVER_PORT")
-    overrideInt(&config.Server.ReadTimeout, "SERVER_READ_TIMEOUT")
-    overrideInt(&config.Server.WriteTimeout, "SERVER_WRITE_TIMEOUT")
-    overrideBool(&config.Server.DebugMode, "SERVER_DEBUG")
-
-    overrideString(&config.LogLevel, "LOG_LEVEL")
-}
-
-func overrideString(field *string, envVar string) {
-    if val := os.Getenv(envVar); val != "" {
-        *field = val
-    }
-}
-
-func overrideInt(field *int, envVar string) {
-    if val := os.Getenv(envVar); val != "" {
-        var intVal int
-        if _, err := fmt.Sscanf(val, "%d", &intVal); err == nil {
-            *field = intVal
-        }
-    }
-}
-
-func overrideBool(field *bool, envVar string) {
-    if val := os.Getenv(envVar); val != "" {
-        *field = val == "true" || val == "1" || val == "yes"
-    }
+		envVar := prefix + envTag
+		if val := os.Getenv(envVar); val != "" {
+			switch field.Kind() {
+			case reflect.String:
+				field.SetString(val)
+			case reflect.Int:
+				if intVal, err := strconv.Atoi(val); err == nil {
+					field.SetInt(int64(intVal))
+				}
+			}
+		}
+	}
 }
