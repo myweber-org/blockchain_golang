@@ -1,121 +1,110 @@
-
 package main
 
 import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 )
 
-func deriveKey(password string, salt []byte) []byte {
-	hash := sha256.New()
-	hash.Write([]byte(password))
-	hash.Write(salt)
-	return hash.Sum(nil)
-}
-
-func encryptFile(inputPath, outputPath, password string) error {
-	salt := make([]byte, 16)
-	if _, err := rand.Read(salt); err != nil {
-		return err
-	}
-
-	key := deriveKey(password, salt)
-
+func encryptFile(inputPath, outputPath string, key []byte) error {
 	plaintext, err := os.ReadFile(inputPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("read input file: %w", err)
 	}
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return err
+		return fmt.Errorf("create cipher: %w", err)
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return err
+		return fmt.Errorf("create GCM: %w", err)
 	}
 
 	nonce := make([]byte, gcm.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return err
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return fmt.Errorf("generate nonce: %w", err)
 	}
 
-	ciphertext := gcm.Seal(nil, nonce, plaintext, nil)
+	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
 
-	outputData := append(salt, nonce...)
-	outputData = append(outputData, ciphertext...)
+	if err := os.WriteFile(outputPath, ciphertext, 0644); err != nil {
+		return fmt.Errorf("write output file: %w", err)
+	}
 
-	return os.WriteFile(outputPath, outputData, 0644)
+	return nil
 }
 
-func decryptFile(inputPath, outputPath, password string) error {
+func decryptFile(inputPath, outputPath string, key []byte) error {
 	ciphertext, err := os.ReadFile(inputPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("read input file: %w", err)
 	}
-
-	if len(ciphertext) < 32 {
-		return errors.New("file too short")
-	}
-
-	salt := ciphertext[:16]
-	nonce := ciphertext[16:28]
-	actualCiphertext := ciphertext[28:]
-
-	key := deriveKey(password, salt)
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return err
+		return fmt.Errorf("create cipher: %w", err)
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return err
+		return fmt.Errorf("create GCM: %w", err)
 	}
 
-	plaintext, err := gcm.Open(nil, nonce, actualCiphertext, nil)
+	nonceSize := gcm.NonceSize()
+	if len(ciphertext) < nonceSize {
+		return errors.New("ciphertext too short")
+	}
+
+	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("decrypt data: %w", err)
 	}
 
-	return os.WriteFile(outputPath, plaintext, 0644)
+	if err := os.WriteFile(outputPath, plaintext, 0644); err != nil {
+		return fmt.Errorf("write output file: %w", err)
+	}
+
+	return nil
 }
 
 func main() {
 	if len(os.Args) < 5 {
-		fmt.Println("Usage: go run file_encryptor.go <encrypt|decrypt> <input> <output> <password>")
+		fmt.Println("Usage: go run file_encryptor.go <encrypt|decrypt> <input> <output> <key>")
 		os.Exit(1)
 	}
 
 	operation := os.Args[1]
 	inputPath := os.Args[2]
 	outputPath := os.Args[3]
-	password := os.Args[4]
+	key := []byte(os.Args[4])
 
-	switch operation {
-	case "encrypt":
-		if err := encryptFile(inputPath, outputPath, password); err != nil {
-			fmt.Printf("Encryption failed: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Println("File encrypted successfully")
-	case "decrypt":
-		if err := decryptFile(inputPath, outputPath, password); err != nil {
-			fmt.Printf("Decryption failed: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Println("File decrypted successfully")
-	default:
-		fmt.Println("Invalid operation. Use 'encrypt' or 'decrypt'")
+	if len(key) != 32 {
+		fmt.Println("Key must be 32 bytes for AES-256")
 		os.Exit(1)
 	}
+
+	var err error
+	switch operation {
+	case "encrypt":
+		err = encryptFile(inputPath, outputPath, key)
+	case "decrypt":
+		err = decryptFile(inputPath, outputPath, key)
+	default:
+		fmt.Println("Operation must be 'encrypt' or 'decrypt'")
+		os.Exit(1)
+	}
+
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Operation completed successfully")
 }
