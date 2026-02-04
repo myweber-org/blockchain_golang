@@ -125,3 +125,22 @@ func main() {
     fmt.Println("\nJSON Output:")
     fmt.Println(jsonOutput)
 }
+package main
+
+import "fmt"
+
+func FilterAndDouble(numbers []int, threshold int) []int {
+    var result []int
+    for _, num := range numbers {
+        if num > threshold {
+            result = append(result, num*2)
+        }
+    }
+    return result
+}
+
+func main() {
+    input := []int{1, 5, 10, 15, 20}
+    output := FilterAndDouble(input, 8)
+    fmt.Printf("Processed slice: %v\n", output)
+}
