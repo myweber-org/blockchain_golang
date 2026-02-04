@@ -84,3 +84,45 @@ func CalculateTotal(records []Record) float64 {
 	}
 	return total
 }
+package main
+
+import (
+	"regexp"
+	"strings"
+)
+
+// CleanString removes extra whitespace and normalizes string
+func CleanString(input string) string {
+	// Trim leading/trailing whitespace
+	trimmed := strings.TrimSpace(input)
+	
+	// Replace multiple spaces with single space
+	re := regexp.MustCompile(`\s+`)
+	cleaned := re.ReplaceAllString(trimmed, " ")
+	
+	return cleaned
+}
+
+// NormalizeCase converts string to lowercase with first letter capitalized
+func NormalizeCase(input string) string {
+	if len(input) == 0 {
+		return input
+	}
+	
+	cleaned := CleanString(input)
+	lower := strings.ToLower(cleaned)
+	
+	// Capitalize first letter
+	runes := []rune(lower)
+	if len(runes) > 0 {
+		runes[0] = []rune(strings.ToUpper(string(runes[0])))[0]
+	}
+	
+	return string(runes)
+}
+
+// ProcessData applies cleaning and normalization to string
+func ProcessData(input string) string {
+	cleaned := CleanString(input)
+	return NormalizeCase(cleaned)
+}
