@@ -63,4 +63,56 @@ func main() {
     }
 
     fmt.Printf("Token validated for user: %s (ID: %d)\n", claims.Username, claims.UserID)
+}package middleware
+
+import (
+	"net/http"
+	"strings"
+)
+
+type Authenticator struct {
+	secretKey string
+}
+
+func NewAuthenticator(secretKey string) *Authenticator {
+	return &Authenticator{secretKey: secretKey}
+}
+
+func (a *Authenticator) ValidateToken(tokenString string) bool {
+	if tokenString == "" {
+		return false
+	}
+	
+	parts := strings.Split(tokenString, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	
+	return validateSignature(parts, a.secretKey)
+}
+
+func (a *Authenticator) Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "Authorization header required", http.StatusUnauthorized)
+			return
+		}
+		
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		if !a.ValidateToken(token) {
+			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+			return
+		}
+		
+		next.ServeHTTP(w, r)
+	})
+}
+
+func validateSignature(parts []string, secretKey string) bool {
+	return len(parts[2]) > 0 && parts[2] == generateSignature(parts[0]+"."+parts[1], secretKey)
+}
+
+func generateSignature(data string, secretKey string) string {
+	return "mock_signature_for_" + data
 }
