@@ -1,53 +1,42 @@
 package config
 
 import (
-    "fmt"
-    "io/ioutil"
-    "gopkg.in/yaml.v2"
+    "bufio"
+    "os"
+    "strings"
 )
 
-type DatabaseConfig struct {
-    Host     string `yaml:"host"`
-    Port     int    `yaml:"port"`
-    Username string `yaml:"username"`
-    Password string `yaml:"password"`
-    Name     string `yaml:"name"`
-}
+type Config map[string]string
 
-type ServerConfig struct {
-    Port int    `yaml:"port"`
-    Env  string `yaml:"env"`
-}
-
-type AppConfig struct {
-    Database DatabaseConfig `yaml:"database"`
-    Server   ServerConfig   `yaml:"server"`
-}
-
-func LoadConfig(filePath string) (*AppConfig, error) {
-    data, err := ioutil.ReadFile(filePath)
+func LoadConfig(filename string) (Config, error) {
+    file, err := os.Open(filename)
     if err != nil {
-        return nil, fmt.Errorf("failed to read config file: %w", err)
+        return nil, err
+    }
+    defer file.Close()
+
+    config := make(Config)
+    scanner := bufio.NewScanner(file)
+
+    for scanner.Scan() {
+        line := strings.TrimSpace(scanner.Text())
+        if line == "" || strings.HasPrefix(line, "#") {
+            continue
+        }
+
+        parts := strings.SplitN(line, "=", 2)
+        if len(parts) != 2 {
+            continue
+        }
+
+        key := strings.TrimSpace(parts[0])
+        value := strings.TrimSpace(parts[1])
+        config[key] = os.ExpandEnv(value)
     }
 
-    var config AppConfig
-    err = yaml.Unmarshal(data, &config)
-    if err != nil {
-        return nil, fmt.Errorf("failed to parse YAML: %w", err)
+    if err := scanner.Err(); err != nil {
+        return nil, err
     }
 
-    return &config, nil
-}
-
-func ValidateConfig(config *AppConfig) error {
-    if config.Database.Host == "" {
-        return fmt.Errorf("database host is required")
-    }
-    if config.Database.Port <= 0 {
-        return fmt.Errorf("database port must be positive")
-    }
-    if config.Server.Port <= 0 {
-        return fmt.Errorf("server port must be positive")
-    }
-    return nil
+    return config, nil
 }
