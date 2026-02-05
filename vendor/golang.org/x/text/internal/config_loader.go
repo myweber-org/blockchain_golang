@@ -99,4 +99,61 @@ func SaveConfig(config *AppConfig, filePath string) error {
 	}
 
 	return ioutil.WriteFile(filePath, data, 0644)
+}package config
+
+import (
+    "fmt"
+    "os"
+    "strconv"
+    "strings"
+)
+
+type Config struct {
+    ServerPort int
+    DatabaseURL string
+    EnableDebug bool
+    MaxConnections int
+}
+
+func LoadConfig() (*Config, error) {
+    cfg := &Config{}
+    
+    portStr := getEnvWithDefault("SERVER_PORT", "8080")
+    port, err := strconv.Atoi(portStr)
+    if err != nil {
+        return nil, fmt.Errorf("invalid SERVER_PORT: %v", err)
+    }
+    cfg.ServerPort = port
+    
+    cfg.DatabaseURL = getEnvRequired("DATABASE_URL")
+    
+    debugStr := getEnvWithDefault("ENABLE_DEBUG", "false")
+    cfg.EnableDebug = strings.ToLower(debugStr) == "true"
+    
+    maxConnStr := getEnvWithDefault("MAX_CONNECTIONS", "100")
+    maxConn, err := strconv.Atoi(maxConnStr)
+    if err != nil {
+        return nil, fmt.Errorf("invalid MAX_CONNECTIONS: %v", err)
+    }
+    if maxConn <= 0 {
+        return nil, fmt.Errorf("MAX_CONNECTIONS must be positive")
+    }
+    cfg.MaxConnections = maxConn
+    
+    return cfg, nil
+}
+
+func getEnvWithDefault(key, defaultValue string) string {
+    if value := os.Getenv(key); value != "" {
+        return value
+    }
+    return defaultValue
+}
+
+func getEnvRequired(key string) string {
+    value := os.Getenv(key)
+    if value == "" {
+        panic(fmt.Sprintf("required environment variable %s is not set", key))
+    }
+    return value
 }
