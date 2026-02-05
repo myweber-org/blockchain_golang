@@ -1,52 +1,70 @@
-
 package main
 
 import (
 	"fmt"
 )
 
-const usdToEurRate = 0.85
-
-func ConvertUSDToEUR(amount float64) float64 {
-	return amount * usdToEurRate
+type ExchangeRate struct {
+	FromCurrency string
+	ToCurrency   string
+	Rate         float64
 }
 
-func main() {
-	usdAmount := 100.0
-	eurAmount := ConvertUSDToEUR(usdAmount)
-	fmt.Printf("%.2f USD = %.2f EUR\n", usdAmount, eurAmount)
-}package main
-
-import (
-	"fmt"
-	"os"
-	"strconv"
-)
-
-const exchangeRate = 0.85
-
-func convertUSDToEUR(amount float64) float64 {
-	return amount * exchangeRate
+type CurrencyConverter struct {
+	rates []ExchangeRate
 }
 
-func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: go run currency_converter.go <amount_in_usd>")
-		return
+func NewCurrencyConverter() *CurrencyConverter {
+	return &CurrencyConverter{
+		rates: []ExchangeRate{
+			{"USD", "EUR", 0.85},
+			{"EUR", "USD", 1.18},
+			{"USD", "GBP", 0.73},
+			{"GBP", "USD", 1.37},
+			{"USD", "JPY", 110.25},
+			{"JPY", "USD", 0.0091},
+		},
+	}
+}
+
+func (c *CurrencyConverter) Convert(amount float64, fromCurrency, toCurrency string) (float64, error) {
+	if fromCurrency == toCurrency {
+		return amount, nil
 	}
 
-	amountStr := os.Args[1]
-	amount, err := strconv.ParseFloat(amountStr, 64)
+	for _, rate := range c.rates {
+		if rate.FromCurrency == fromCurrency && rate.ToCurrency == toCurrency {
+			return amount * rate.Rate, nil
+		}
+	}
+
+	return 0, fmt.Errorf("conversion rate not found for %s to %s", fromCurrency, toCurrency)
+}
+
+func (c *CurrencyConverter) AddRate(fromCurrency, toCurrency string, rate float64) {
+	c.rates = append(c.rates, ExchangeRate{
+		FromCurrency: fromCurrency,
+		ToCurrency:   toCurrency,
+		Rate:         rate,
+	})
+}
+
+func main() {
+	converter := NewCurrencyConverter()
+
+	amount := 100.0
+	result, err := converter.Convert(amount, "USD", "EUR")
 	if err != nil {
-		fmt.Printf("Invalid amount: %s\n", amountStr)
+		fmt.Printf("Error: %v\n", err)
 		return
 	}
+	fmt.Printf("%.2f USD = %.2f EUR\n", amount, result)
 
-	if amount < 0 {
-		fmt.Println("Amount cannot be negative")
+	converter.AddRate("EUR", "GBP", 0.86)
+	result2, err := converter.Convert(200.0, "EUR", "GBP")
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
 		return
 	}
-
-	converted := convertUSDToEUR(amount)
-	fmt.Printf("%.2f USD = %.2f EUR (Rate: %.2f)\n", amount, converted, exchangeRate)
+	fmt.Printf("%.2f EUR = %.2f GBP\n", 200.0, result2)
 }
