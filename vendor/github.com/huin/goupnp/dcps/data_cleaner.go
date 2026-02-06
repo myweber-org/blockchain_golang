@@ -25,3 +25,26 @@ func main() {
 	fmt.Println("Original:", strings)
 	fmt.Println("Unique:", uniqueStrings)
 }
+package main
+
+import "fmt"
+
+func RemoveDuplicates(input []string) []string {
+	seen := make(map[string]struct{})
+	result := make([]string, 0)
+
+	for _, item := range input {
+		if _, exists := seen[item]; !exists {
+			seen[item] = struct{}{}
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+func main() {
+	data := []string{"apple", "banana", "apple", "orange", "banana", "grape"}
+	unique := RemoveDuplicates(data)
+	fmt.Println("Original:", data)
+	fmt.Println("Unique:", unique)
+}
