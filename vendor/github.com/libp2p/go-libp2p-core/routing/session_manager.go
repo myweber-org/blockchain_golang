@@ -1,62 +1,91 @@
-package session
+package main
 
 import (
-    "crypto/rand"
-    "encoding/hex"
-    "errors"
+    "sync"
     "time"
 )
 
 type Session struct {
     ID        string
     UserID    int
+    Data      map[string]interface{}
     ExpiresAt time.Time
 }
 
-var sessions = make(map[string]Session)
+type SessionManager struct {
+    sessions map[string]*Session
+    mu       sync.RWMutex
+    stopChan chan struct{}
+}
 
-func GenerateSession(userID int) (string, error) {
-    token := make([]byte, 16)
-    _, err := rand.Read(token)
-    if err != nil {
-        return "", err
+func NewSessionManager(cleanupInterval time.Duration) *SessionManager {
+    sm := &SessionManager{
+        sessions: make(map[string]*Session),
+        stopChan: make(chan struct{}),
     }
+    go sm.cleanupExpiredSessions(cleanupInterval)
+    return sm
+}
 
-    sessionID := hex.EncodeToString(token)
-    expiresAt := time.Now().Add(24 * time.Hour)
+func (sm *SessionManager) CreateSession(userID int, ttl time.Duration) *Session {
+    sm.mu.Lock()
+    defer sm.mu.Unlock()
 
-    sessions[sessionID] = Session{
-        ID:        sessionID,
+    session := &Session{
+        ID:        generateSessionID(),
         UserID:    userID,
-        ExpiresAt: expiresAt,
+        Data:      make(map[string]interface{}),
+        ExpiresAt: time.Now().Add(ttl),
     }
-
-    return sessionID, nil
+    sm.sessions[session.ID] = session
+    return session
 }
 
-func ValidateSession(sessionID string) (Session, error) {
-    session, exists := sessions[sessionID]
-    if !exists {
-        return Session{}, errors.New("session not found")
-    }
+func (sm *SessionManager) GetSession(sessionID string) (*Session, bool) {
+    sm.mu.RLock()
+    defer sm.mu.RUnlock()
 
-    if time.Now().After(session.ExpiresAt) {
-        delete(sessions, sessionID)
-        return Session{}, errors.New("session expired")
+    session, exists := sm.sessions[sessionID]
+    if !exists || time.Now().After(session.ExpiresAt) {
+        return nil, false
     }
-
-    return session, nil
+    return session, true
 }
 
-func InvalidateSession(sessionID string) {
-    delete(sessions, sessionID)
-}
+func (sm *SessionManager) cleanupExpiredSessions(interval time.Duration) {
+    ticker := time.NewTicker(interval)
+    defer ticker.Stop()
 
-func CleanupExpiredSessions() {
-    now := time.Now()
-    for id, session := range sessions {
-        if now.After(session.ExpiresAt) {
-            delete(sessions, id)
+    for {
+        select {
+        case <-ticker.C:
+            sm.mu.Lock()
+            now := time.Now()
+            for id, session := range sm.sessions {
+                if now.After(session.ExpiresAt) {
+                    delete(sm.sessions, id)
+                }
+            }
+            sm.mu.Unlock()
+        case <-sm.stopChan:
+            return
         }
     }
+}
+
+func (sm *SessionManager) StopCleanup() {
+    close(sm.stopChan)
+}
+
+func generateSessionID() string {
+    return "sess_" + time.Now().Format("20060102150405") + "_" + randomString(16)
+}
+
+func randomString(length int) string {
+    const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    b := make([]byte, length)
+    for i := range b {
+        b[i] = charset[time.Now().UnixNano()%int64(len(charset))]
+    }
+    return string(b)
 }
