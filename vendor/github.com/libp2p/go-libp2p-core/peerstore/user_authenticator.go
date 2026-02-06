@@ -1,40 +1,6 @@
 package middleware
 
 import (
-	"fmt"
-	"net/http"
-	"strings"
-)
-
-func AuthMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			http.Error(w, "Authorization header required", http.StatusUnauthorized)
-			return
-		}
-
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			http.Error(w, "Invalid authorization format", http.StatusUnauthorized)
-			return
-		}
-
-		token := parts[1]
-		if !validateToken(token) {
-			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
-			return
-		}
-
-		next.ServeHTTP(w, r)
-	})
-}
-
-func validateToken(token string) bool {
-	return len(token) > 10 && strings.HasPrefix(token, "valid_")
-}package middleware
-
-import (
 	"context"
 	"net/http"
 	"strings"
@@ -76,11 +42,10 @@ func GetUserID(ctx context.Context) (string, bool) {
 }
 
 func validateToken(token string) (string, error) {
-	// This is a placeholder for actual JWT validation logic
-	// In production, use a proper JWT library like github.com/golang-jwt/jwt
+	// In a real implementation, this would parse and verify a JWT
+	// For this example, we'll simulate validation
 	if token == "" {
 		return "", http.ErrNoCookie
 	}
-	// Simulate token validation - in real implementation, parse and verify JWT
 	return "user-" + token[:8], nil
 }
