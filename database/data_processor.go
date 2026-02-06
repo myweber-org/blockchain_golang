@@ -105,3 +105,40 @@ func main() {
     fmt.Println("Original:", values)
     fmt.Println("Moving Average (window=3):", averaged)
 }
+package data_processor
+
+import (
+	"encoding/json"
+	"fmt"
+)
+
+type ValidationError struct {
+	Field   string `json:"field"`
+	Message string `json:"message"`
+}
+
+func (e ValidationError) Error() string {
+	return fmt.Sprintf("validation error on field '%s': %s", e.Field, e.Message)
+}
+
+func ParseAndValidateJSON(rawData []byte, target interface{}, requiredFields []string) error {
+	if err := json.Unmarshal(rawData, target); err != nil {
+		return fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	dataMap := make(map[string]interface{})
+	if err := json.Unmarshal(rawData, &dataMap); err != nil {
+		return fmt.Errorf("failed to parse JSON into map: %w", err)
+	}
+
+	for _, field := range requiredFields {
+		if value, exists := dataMap[field]; !exists || value == nil || value == "" {
+			return ValidationError{
+				Field:   field,
+				Message: "field is required and cannot be empty",
+			}
+		}
+	}
+
+	return nil
+}
