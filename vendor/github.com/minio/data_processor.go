@@ -194,4 +194,52 @@ func GenerateReport(records []DataRecord) {
 	active := FilterActiveRecords(records)
 	fmt.Printf("Active records: %d\n", len(active))
 	fmt.Printf("Inactive records: %d\n", len(records)-len(active))
+}package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+)
+
+type User struct {
+	ID       int    `json:"id"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	Active   bool   `json:"active"`
+}
+
+func ValidateAndParseUser(jsonData []byte) (*User, error) {
+	var user User
+	err := json.Unmarshal(jsonData, &user)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
+	}
+
+	if user.ID <= 0 {
+		return nil, fmt.Errorf("invalid user ID: %d", user.ID)
+	}
+	if user.Username == "" {
+		return nil, fmt.Errorf("username cannot be empty")
+	}
+	if user.Email == "" {
+		return nil, fmt.Errorf("email cannot be empty")
+	}
+
+	return &user, nil
+}
+
+func main() {
+	validJSON := []byte(`{"id": 123, "username": "johndoe", "email": "john@example.com", "active": true}`)
+	user, err := ValidateAndParseUser(validJSON)
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
+	fmt.Printf("Parsed user: %+v\n", user)
+
+	invalidJSON := []byte(`{"id": -5, "username": "", "email": "bad@example.com"}`)
+	_, err = ValidateAndParseUser(invalidJSON)
+	if err != nil {
+		fmt.Printf("Expected validation error: %v\n", err)
+	}
 }
