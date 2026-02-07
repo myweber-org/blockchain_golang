@@ -82,4 +82,76 @@ func overrideFromEnv(cfg *Config) {
     if val := os.Getenv("LOG_LEVEL"); val != "" {
         cfg.LogLevel = val
     }
+}package config
+
+import (
+    "fmt"
+    "os"
+    "strconv"
+    "strings"
+)
+
+type Config struct {
+    ServerPort int
+    DBHost     string
+    DBPort     int
+    DebugMode  bool
+    APIKeys    []string
+}
+
+func LoadConfig() (*Config, error) {
+    cfg := &Config{}
+
+    port, err := getEnvInt("SERVER_PORT", 8080)
+    if err != nil {
+        return nil, fmt.Errorf("invalid SERVER_PORT: %w", err)
+    }
+    cfg.ServerPort = port
+
+    cfg.DBHost = getEnv("DB_HOST", "localhost")
+
+    dbPort, err := getEnvInt("DB_PORT", 5432)
+    if err != nil {
+        return nil, fmt.Errorf("invalid DB_PORT: %w", err)
+    }
+    cfg.DBPort = dbPort
+
+    debug, err := getEnvBool("DEBUG_MODE", false)
+    if err != nil {
+        return nil, fmt.Errorf("invalid DEBUG_MODE: %w", err)
+    }
+    cfg.DebugMode = debug
+
+    apiKeysStr := getEnv("API_KEYS", "")
+    if apiKeysStr != "" {
+        cfg.APIKeys = strings.Split(apiKeysStr, ",")
+        for i, key := range cfg.APIKeys {
+            cfg.APIKeys[i] = strings.TrimSpace(key)
+        }
+    }
+
+    return cfg, nil
+}
+
+func getEnv(key, defaultValue string) string {
+    if value := os.Getenv(key); value != "" {
+        return value
+    }
+    return defaultValue
+}
+
+func getEnvInt(key string, defaultValue int) (int, error) {
+    strValue := os.Getenv(key)
+    if strValue == "" {
+        return defaultValue, nil
+    }
+    return strconv.Atoi(strValue)
+}
+
+func getEnvBool(key string, defaultValue bool) (bool, error) {
+    strValue := os.Getenv(key)
+    if strValue == "" {
+        return defaultValue, nil
+    }
+    return strconv.ParseBool(strValue)
 }
