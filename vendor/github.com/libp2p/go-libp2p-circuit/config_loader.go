@@ -131,4 +131,52 @@ func (c *AppConfig) GetDSN() string {
 		c.Database.Port,
 		c.Database.Database,
 	)
+}package config
+
+import (
+    "encoding/json"
+    "os"
+    "path/filepath"
+)
+
+type AppConfig struct {
+    ServerPort string `json:"server_port" env:"SERVER_PORT"`
+    DBHost     string `json:"db_host" env:"DB_HOST"`
+    DBPort     int    `json:"db_port" env:"DB_PORT"`
+    DebugMode  bool   `json:"debug_mode" env:"DEBUG_MODE"`
+}
+
+func LoadConfig(configPath string) (*AppConfig, error) {
+    cfg := &AppConfig{
+        ServerPort: "8080",
+        DBHost:     "localhost",
+        DBPort:     5432,
+        DebugMode:  false,
+    }
+
+    if configPath != "" {
+        absPath, err := filepath.Abs(configPath)
+        if err != nil {
+            return nil, err
+        }
+
+        data, err := os.ReadFile(absPath)
+        if err == nil {
+            if err := json.Unmarshal(data, cfg); err != nil {
+                return nil, err
+            }
+        }
+    }
+
+    if port := os.Getenv("SERVER_PORT"); port != "" {
+        cfg.ServerPort = port
+    }
+    if host := os.Getenv("DB_HOST"); host != "" {
+        cfg.DBHost = host
+    }
+    if debug := os.Getenv("DEBUG_MODE"); debug == "true" {
+        cfg.DebugMode = true
+    }
+
+    return cfg, nil
 }
