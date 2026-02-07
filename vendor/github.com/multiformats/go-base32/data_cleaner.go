@@ -176,4 +176,43 @@ func main() {
 	for _, rec := range cleaned {
 		fmt.Printf("ID: %d, Email: %s, Valid: %t\n", rec.ID, rec.Email, rec.Valid)
 	}
+}package datautils
+
+import (
+	"regexp"
+	"strings"
+	"unicode"
+)
+
+func SanitizeString(input string) string {
+	// Remove any non-printable characters
+	clean := strings.Map(func(r rune) rune {
+		if unicode.IsPrint(r) {
+			return r
+		}
+		return -1
+	}, input)
+
+	// Replace multiple whitespaces with a single space
+	re := regexp.MustCompile(`\s+`)
+	clean = re.ReplaceAllString(clean, " ")
+
+	// Trim leading and trailing whitespace
+	clean = strings.TrimSpace(clean)
+
+	return clean
+}
+
+func NormalizeWhitespace(input string) string {
+	// Standardize line endings to Unix style
+	normalized := strings.ReplaceAll(input, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+
+	// Remove trailing whitespace from each line
+	lines := strings.Split(normalized, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " \t")
+	}
+
+	return strings.Join(lines, "\n")
 }
