@@ -2,33 +2,11 @@ package main
 
 import "fmt"
 
-func RemoveDuplicates(input []int) []int {
-	seen := make(map[int]bool)
-	result := []int{}
+func RemoveDuplicates[T comparable](slice []T) []T {
+	seen := make(map[T]bool)
+	result := []T{}
 
-	for _, value := range input {
-		if !seen[value] {
-			seen[value] = true
-			result = append(result, value)
-		}
-	}
-	return result
-}
-
-func main() {
-	data := []int{1, 2, 2, 3, 4, 4, 5, 1, 6}
-	cleaned := RemoveDuplicates(data)
-	fmt.Printf("Original: %v\n", data)
-	fmt.Printf("Cleaned: %v\n", cleaned)
-}package main
-
-import "fmt"
-
-func RemoveDuplicates(input []string) []string {
-	seen := make(map[string]bool)
-	result := []string{}
-
-	for _, item := range input {
+	for _, item := range slice {
 		if !seen[item] {
 			seen[item] = true
 			result = append(result, item)
@@ -38,8 +16,13 @@ func RemoveDuplicates(input []string) []string {
 }
 
 func main() {
-	data := []string{"apple", "banana", "apple", "orange", "banana", "grape"}
-	cleaned := RemoveDuplicates(data)
-	fmt.Println("Original:", data)
-	fmt.Println("Cleaned:", cleaned)
+	numbers := []int{1, 2, 2, 3, 4, 4, 5, 5}
+	uniqueNumbers := RemoveDuplicates(numbers)
+	fmt.Println("Original:", numbers)
+	fmt.Println("Unique:", uniqueNumbers)
+
+	strings := []string{"apple", "banana", "apple", "orange", "banana"}
+	uniqueStrings := RemoveDuplicates(strings)
+	fmt.Println("Original:", strings)
+	fmt.Println("Unique:", uniqueStrings)
 }
