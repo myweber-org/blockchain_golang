@@ -259,3 +259,137 @@ func main() {
     
     fmt.Println("Log rotation completed")
 }
+package main
+
+import (
+    "fmt"
+    "io"
+    "log"
+    "os"
+    "path/filepath"
+    "time"
+)
+
+const (
+    maxFileSize = 10 * 1024 * 1024 // 10MB
+    maxBackups  = 5
+    logDir      = "./logs"
+)
+
+type RotatingLogger struct {
+    currentFile *os.File
+    currentSize int64
+    baseName    string
+    sequence    int
+}
+
+func NewRotatingLogger(baseName string) (*RotatingLogger, error) {
+    if err := os.MkdirAll(logDir, 0755); err != nil {
+        return nil, err
+    }
+
+    rl := &RotatingLogger{
+        baseName: baseName,
+        sequence: 0,
+    }
+
+    if err := rl.openNewFile(); err != nil {
+        return nil, err
+    }
+
+    return rl, nil
+}
+
+func (rl *RotatingLogger) openNewFile() error {
+    if rl.currentFile != nil {
+        rl.currentFile.Close()
+    }
+
+    filename := filepath.Join(logDir, fmt.Sprintf("%s.log", rl.baseName))
+    file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+    if err != nil {
+        return err
+    }
+
+    info, err := file.Stat()
+    if err != nil {
+        file.Close()
+        return err
+    }
+
+    rl.currentFile = file
+    rl.currentSize = info.Size()
+    rl.sequence++
+
+    return nil
+}
+
+func (rl *RotatingLogger) Write(p []byte) (int, error) {
+    if rl.currentSize+int64(len(p)) > maxFileSize {
+        if err := rl.rotate(); err != nil {
+            log.Printf("Failed to rotate log: %v", err)
+        }
+    }
+
+    n, err := rl.currentFile.Write(p)
+    if err == nil {
+        rl.currentSize += int64(n)
+    }
+    return n, err
+}
+
+func (rl *RotatingLogger) rotate() error {
+    if rl.currentFile != nil {
+        rl.currentFile.Close()
+    }
+
+    oldPath := filepath.Join(logDir, fmt.Sprintf("%s.log", rl.baseName))
+    newPath := filepath.Join(logDir, fmt.Sprintf("%s.%d.log", rl.baseName, time.Now().Unix()))
+
+    if err := os.Rename(oldPath, newPath); err != nil {
+        return err
+    }
+
+    rl.cleanupOldFiles()
+    return rl.openNewFile()
+}
+
+func (rl *RotatingLogger) cleanupOldFiles() {
+    pattern := filepath.Join(logDir, fmt.Sprintf("%s.*.log", rl.baseName))
+    files, err := filepath.Glob(pattern)
+    if err != nil {
+        return
+    }
+
+    if len(files) <= maxBackups {
+        return
+    }
+
+    filesToDelete := files[:len(files)-maxBackups]
+    for _, file := range filesToDelete {
+        os.Remove(file)
+    }
+}
+
+func (rl *RotatingLogger) Close() error {
+    if rl.currentFile != nil {
+        return rl.currentFile.Close()
+    }
+    return nil
+}
+
+func main() {
+    logger, err := NewRotatingLogger("app")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer logger.Close()
+
+    multiWriter := io.MultiWriter(os.Stdout, logger)
+    log.SetOutput(multiWriter)
+
+    for i := 0; i < 1000; i++ {
+        log.Printf("Log entry number %d with some sample data", i)
+        time.Sleep(100 * time.Millisecond)
+    }
+}
