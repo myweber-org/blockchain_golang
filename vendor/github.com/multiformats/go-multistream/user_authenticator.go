@@ -1,54 +1,6 @@
 package auth
 
 import (
-    "errors"
-    "time"
-
-    "github.com/golang-jwt/jwt/v5"
-)
-
-type Claims struct {
-    UserID string `json:"user_id"`
-    Role   string `json:"role"`
-    jwt.RegisteredClaims
-}
-
-var jwtKey = []byte("your_secret_key_here")
-
-func GenerateToken(userID, role string) (string, error) {
-    expirationTime := time.Now().Add(24 * time.Hour)
-    claims := &Claims{
-        UserID: userID,
-        Role:   role,
-        RegisteredClaims: jwt.RegisteredClaims{
-            ExpiresAt: jwt.NewNumericDate(expirationTime),
-            IssuedAt:  jwt.NewNumericDate(time.Now()),
-            Issuer:    "myapp",
-        },
-    }
-
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-    return token.SignedString(jwtKey)
-}
-
-func ValidateToken(tokenString string) (*Claims, error) {
-    claims := &Claims{}
-    token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-        return jwtKey, nil
-    })
-
-    if err != nil {
-        return nil, err
-    }
-
-    if !token.Valid {
-        return nil, errors.New("invalid token")
-    }
-
-    return claims, nil
-}package middleware
-
-import (
 	"context"
 	"net/http"
 	"strings"
@@ -62,7 +14,7 @@ func Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			http.Error(w, "Authorization header required", http.StatusUnauthorized)
+			http.Error(w, "Missing authorization header", http.StatusUnauthorized)
 			return
 		}
 
@@ -90,11 +42,10 @@ func GetUserID(ctx context.Context) (string, bool) {
 }
 
 func validateToken(token string) (string, error) {
-	// In a real implementation, this would parse and validate a JWT
-	// For this example, we'll do a simple mock validation
+	// Simplified token validation logic
+	// In production, use proper JWT validation library
 	if token == "" || len(token) < 10 {
-		return "", http.ErrAbortHandler
+		return "", http.ErrNoCookie
 	}
-	// Mock user ID extraction - in reality this would come from JWT claims
-	return "user_" + token[:8], nil
+	return "user-" + token[:8], nil
 }
