@@ -161,3 +161,35 @@ func main() {
 	}
 	fmt.Printf("Processed data: %+v\n", processedData)
 }
+package data_processor
+
+import (
+	"regexp"
+	"strings"
+)
+
+type Processor struct {
+	whitespaceRegex *regexp.Regexp
+}
+
+func NewProcessor() *Processor {
+	return &Processor{
+		whitespaceRegex: regexp.MustCompile(`\s+`),
+	}
+}
+
+func (p *Processor) CleanInput(input string) string {
+	trimmed := strings.TrimSpace(input)
+	normalized := p.whitespaceRegex.ReplaceAllString(trimmed, " ")
+	return normalized
+}
+
+func (p *Processor) NormalizeCase(input string) string {
+	return strings.ToLower(input)
+}
+
+func (p *Processor) ExtractTokens(input string) []string {
+	cleaned := p.CleanInput(input)
+	normalized := p.NormalizeCase(cleaned)
+	return strings.Fields(normalized)
+}
