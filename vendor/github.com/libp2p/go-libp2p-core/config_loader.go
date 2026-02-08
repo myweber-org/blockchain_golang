@@ -126,4 +126,67 @@ func validateConfig(config *AppConfig) error {
 	}
 
 	return nil
+}package config
+
+import (
+	"encoding/json"
+	"os"
+	"sync"
+)
+
+type Config struct {
+	ServerPort string `json:"server_port"`
+	Database   struct {
+		Host     string `json:"host"`
+		Port     int    `json:"port"`
+		Username string `json:"username"`
+		Password string `json:"password"`
+	} `json:"database"`
+	LogLevel string `json:"log_level"`
+}
+
+var (
+	instance *Config
+	once     sync.Once
+)
+
+func Load() *Config {
+	once.Do(func() {
+		configFile := os.Getenv("CONFIG_FILE")
+		if configFile == "" {
+			configFile = "config.json"
+		}
+
+		data, err := os.ReadFile(configFile)
+		if err != nil {
+			instance = loadDefaults()
+			return
+		}
+
+		var cfg Config
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			instance = loadDefaults()
+			return
+		}
+
+		overrideWithEnv(&cfg)
+		instance = &cfg
+	})
+	return instance
+}
+
+func loadDefaults() *Config {
+	return &Config{
+		ServerPort: "8080",
+		LogLevel:   "info",
+	}
+}
+
+func overrideWithEnv(cfg *Config) {
+	if port := os.Getenv("SERVER_PORT"); port != "" {
+		cfg.ServerPort = port
+	}
+	if level := os.Getenv("LOG_LEVEL"); level != "" {
+		cfg.LogLevel = level
+	}
 }
