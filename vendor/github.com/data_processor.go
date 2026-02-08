@@ -1,23 +1,30 @@
-
 package main
 
 import (
-	"regexp"
-	"strings"
+	"encoding/json"
+	"fmt"
+	"log"
 )
 
-func SanitizeUsername(input string) string {
-	re := regexp.MustCompile(`[^a-zA-Z0-9_-]`)
-	sanitized := re.ReplaceAllString(input, "")
-	return strings.TrimSpace(sanitized)
+func ValidateJSON(data []byte) (map[string]interface{}, error) {
+	var result map[string]interface{}
+	err := json.Unmarshal(data, &result)
+	if err != nil {
+		return nil, fmt.Errorf("invalid JSON format: %w", err)
+	}
+
+	if len(result) == 0 {
+		return nil, fmt.Errorf("JSON object is empty")
+	}
+
+	return result, nil
 }
 
-func ValidateEmail(email string) bool {
-	pattern := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
-	matched, _ := regexp.MatchString(pattern, email)
-	return matched
-}
-
-func TrimAndLower(input string) string {
-	return strings.ToLower(strings.TrimSpace(input))
+func main() {
+	jsonData := `{"name": "test", "value": 123}`
+	parsed, err := ValidateJSON([]byte(jsonData))
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Parsed data: %v\n", parsed)
 }
