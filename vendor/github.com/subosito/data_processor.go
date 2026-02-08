@@ -107,3 +107,31 @@ func FindMaxValueRecord(records []DataRecord) *DataRecord {
 	}
 	return &maxRecord
 }
+package main
+
+import (
+    "errors"
+    "strings"
+)
+
+func ValidateEmail(email string) error {
+    if !strings.Contains(email, "@") {
+        return errors.New("invalid email format")
+    }
+    return nil
+}
+
+func TrimAndTitle(s string) string {
+    trimmed := strings.TrimSpace(s)
+    return strings.Title(strings.ToLower(trimmed))
+}
+
+func FilterEmptyStrings(slice []string) []string {
+    result := []string{}
+    for _, s := range slice {
+        if s != "" {
+            result = append(result, s)
+        }
+    }
+    return result
+}
