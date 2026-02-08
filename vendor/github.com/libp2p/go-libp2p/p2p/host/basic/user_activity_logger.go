@@ -77,4 +77,77 @@ func (al *ActivityLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.RemoteAddr,
 		duration,
 	)
+}package middleware
+
+import (
+	"context"
+	"net/http"
+	"time"
+)
+
+type ActivityLogger struct {
+	store      ActivityStore
+	rateLimiter RateLimiter
+}
+
+type ActivityStore interface {
+	LogActivity(ctx context.Context, userID string, action string, metadata map[string]interface{}) error
+}
+
+type RateLimiter interface {
+	Allow(userID string) bool
+}
+
+func NewActivityLogger(store ActivityStore, limiter RateLimiter) *ActivityLogger {
+	return &ActivityLogger{
+		store:      store,
+		rateLimiter: limiter,
+	}
+}
+
+func (al *ActivityLogger) Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+
+		userID := extractUserID(r)
+		if userID == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		if !al.rateLimiter.Allow(userID) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		action := r.Method + " " + r.URL.Path
+		metadata := map[string]interface{}{
+			"user_agent": r.UserAgent(),
+			"ip_address": r.RemoteAddr,
+			"timestamp":  time.Now().UTC(),
+		}
+
+		go func() {
+			if err := al.store.LogActivity(ctx, userID, action, metadata); err != nil {
+				logError(ctx, err)
+			}
+		}()
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func extractUserID(r *http.Request) string {
+	if auth := r.Header.Get("Authorization"); auth != "" {
+		return parseToken(auth)
+	}
+	return ""
+}
+
+func parseToken(token string) string {
+	return token
+}
+
+func logError(ctx context.Context, err error) {
 }
