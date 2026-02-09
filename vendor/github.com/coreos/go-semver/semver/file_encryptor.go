@@ -1,4 +1,3 @@
-
 package main
 
 import (
@@ -14,28 +13,28 @@ import (
 func encryptFile(inputPath, outputPath string, key []byte) error {
 	plaintext, err := os.ReadFile(inputPath)
 	if err != nil {
-		return fmt.Errorf("read input file: %w", err)
+		return fmt.Errorf("read file error: %w", err)
 	}
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return fmt.Errorf("create cipher: %w", err)
+		return fmt.Errorf("cipher creation error: %w", err)
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return fmt.Errorf("create GCM: %w", err)
+		return fmt.Errorf("GCM mode error: %w", err)
 	}
 
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return fmt.Errorf("generate nonce: %w", err)
+		return fmt.Errorf("nonce generation error: %w", err)
 	}
 
 	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
 
 	if err := os.WriteFile(outputPath, ciphertext, 0644); err != nil {
-		return fmt.Errorf("write output file: %w", err)
+		return fmt.Errorf("write file error: %w", err)
 	}
 
 	return nil
@@ -44,17 +43,17 @@ func encryptFile(inputPath, outputPath string, key []byte) error {
 func decryptFile(inputPath, outputPath string, key []byte) error {
 	ciphertext, err := os.ReadFile(inputPath)
 	if err != nil {
-		return fmt.Errorf("read input file: %w", err)
+		return fmt.Errorf("read file error: %w", err)
 	}
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return fmt.Errorf("create cipher: %w", err)
+		return fmt.Errorf("cipher creation error: %w", err)
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return fmt.Errorf("create GCM: %w", err)
+		return fmt.Errorf("GCM mode error: %w", err)
 	}
 
 	nonceSize := gcm.NonceSize()
@@ -65,57 +64,42 @@ func decryptFile(inputPath, outputPath string, key []byte) error {
 	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
 	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		return fmt.Errorf("decrypt: %w", err)
+		return fmt.Errorf("decryption error: %w", err)
 	}
 
 	if err := os.WriteFile(outputPath, plaintext, 0644); err != nil {
-		return fmt.Errorf("write output file: %w", err)
+		return fmt.Errorf("write file error: %w", err)
 	}
 
 	return nil
 }
 
 func main() {
-	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		fmt.Printf("Generate key error: %v\n", err)
+	key := []byte("32-byte-long-key-here-123456789012")
+	
+	if len(os.Args) < 4 {
+		fmt.Println("Usage: go run file_encryptor.go <encrypt|decrypt> <input> <output>")
 		return
 	}
 
-	testData := []byte("This is a secret message for encryption test.")
-	inputFile := "test_input.txt"
-	encryptedFile := "test_encrypted.bin"
-	decryptedFile := "test_decrypted.txt"
+	operation := os.Args[1]
+	inputFile := os.Args[2]
+	outputFile := os.Args[3]
 
-	if err := os.WriteFile(inputFile, testData, 0644); err != nil {
-		fmt.Printf("Create test file error: %v\n", err)
-		return
-	}
-	defer os.Remove(inputFile)
-	defer os.Remove(encryptedFile)
-	defer os.Remove(decryptedFile)
-
-	fmt.Println("Testing encryption...")
-	if err := encryptFile(inputFile, encryptedFile, key); err != nil {
-		fmt.Printf("Encryption error: %v\n", err)
-		return
-	}
-
-	fmt.Println("Testing decryption...")
-	if err := decryptFile(encryptedFile, decryptedFile, key); err != nil {
-		fmt.Printf("Decryption error: %v\n", err)
-		return
-	}
-
-	decryptedData, err := os.ReadFile(decryptedFile)
-	if err != nil {
-		fmt.Printf("Read decrypted file error: %v\n", err)
-		return
-	}
-
-	if string(decryptedData) == string(testData) {
-		fmt.Println("SUCCESS: Encryption and decryption completed correctly")
-	} else {
-		fmt.Println("FAILURE: Decrypted data does not match original")
+	switch operation {
+	case "encrypt":
+		if err := encryptFile(inputFile, outputFile, key); err != nil {
+			fmt.Printf("Encryption failed: %v\n", err)
+		} else {
+			fmt.Println("Encryption successful")
+		}
+	case "decrypt":
+		if err := decryptFile(inputFile, outputFile, key); err != nil {
+			fmt.Printf("Decryption failed: %v\n", err)
+		} else {
+			fmt.Println("Decryption successful")
+		}
+	default:
+		fmt.Println("Invalid operation. Use 'encrypt' or 'decrypt'")
 	}
 }
