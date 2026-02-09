@@ -1,53 +1,41 @@
+package datautils
 
-package main
+import "sort"
 
-import (
-	"fmt"
-	"strings"
-)
-
-type DataCleaner struct {
-	seen map[string]bool
-}
-
-func NewDataCleaner() *DataCleaner {
-	return &DataCleaner{
-		seen: make(map[string]bool),
+func RemoveDuplicates[T comparable](slice []T) []T {
+	if len(slice) == 0 {
+		return slice
 	}
-}
 
-func (dc *DataCleaner) Deduplicate(items []string) []string {
-	var unique []string
-	for _, item := range items {
-		normalized := strings.ToLower(strings.TrimSpace(item))
-		if !dc.seen[normalized] && dc.isValid(normalized) {
-			dc.seen[normalized] = true
-			unique = append(unique, item)
+	seen := make(map[T]bool)
+	result := make([]T, 0, len(slice))
+
+	for _, item := range slice {
+		if !seen[item] {
+			seen[item] = true
+			result = append(result, item)
 		}
 	}
-	return unique
+
+	return result
 }
 
-func (dc *DataCleaner) isValid(item string) bool {
-	return len(item) > 0 && !strings.ContainsAny(item, "!@#$%")
-}
+func RemoveDuplicatesSorted[T comparable](slice []T) []T {
+	if len(slice) == 0 {
+		return slice
+	}
 
-func (dc *DataCleaner) Reset() {
-	dc.seen = make(map[string]bool)
-}
+	sort.Slice(slice, func(i, j int) bool {
+		// Convert to string for comparison to satisfy comparable constraint
+		return fmt.Sprintf("%v", slice[i]) < fmt.Sprintf("%v", slice[j])
+	})
 
-func main() {
-	cleaner := NewDataCleaner()
-	
-	data := []string{"apple", "Apple", "banana", "", "cherry!", "banana", "date"}
-	cleaned := cleaner.Deduplicate(data)
-	
-	fmt.Println("Original:", data)
-	fmt.Println("Cleaned:", cleaned)
-	
-	cleaner.Reset()
-	
-	moreData := []string{"grape", "GRAPE", "kiwi"}
-	moreCleaned := cleaner.Deduplicate(moreData)
-	fmt.Println("More cleaned:", moreCleaned)
+	result := slice[:1]
+	for i := 1; i < len(slice); i++ {
+		if slice[i] != slice[i-1] {
+			result = append(result, slice[i])
+		}
+	}
+
+	return result
 }
