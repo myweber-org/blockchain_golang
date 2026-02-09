@@ -178,4 +178,123 @@ func main() {
     }
 
     fmt.Println("Log rotation test completed")
+}package main
+
+import (
+	"compress/gzip"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"time"
+)
+
+const (
+	maxFileSize = 10 * 1024 * 1024 // 10MB
+	backupCount = 5
+)
+
+type RotatingFile struct {
+	currentFile *os.File
+	currentSize int64
+	basePath    string
+}
+
+func NewRotatingFile(path string) (*RotatingFile, error) {
+	rf := &RotatingFile{basePath: path}
+	if err := rf.openCurrentFile(); err != nil {
+		return nil, err
+	}
+	return rf, nil
+}
+
+func (rf *RotatingFile) Write(p []byte) (int, error) {
+	if rf.currentSize+int64(len(p)) > maxFileSize {
+		if err := rf.rotate(); err != nil {
+			return 0, err
+		}
+	}
+
+	n, err := rf.currentFile.Write(p)
+	if err == nil {
+		rf.currentSize += int64(n)
+	}
+	return n, err
+}
+
+func (rf *RotatingFile) rotate() error {
+	if rf.currentFile != nil {
+		rf.currentFile.Close()
+	}
+
+	timestamp := time.Now().Format("20060102_150405")
+	backupPath := fmt.Sprintf("%s.%s.gz", rf.basePath, timestamp)
+
+	if err := compressFile(rf.basePath, backupPath); err != nil {
+		return err
+	}
+
+	cleanupOldBackups(rf.basePath)
+
+	return rf.openCurrentFile()
+}
+
+func compressFile(source, target string) error {
+	src, err := os.Open(source)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	dst, err := os.Create(target)
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+
+	gz := gzip.NewWriter(dst)
+	defer gz.Close()
+
+	_, err = io.Copy(gz, src)
+	return err
+}
+
+func cleanupOldBackups(basePath string) {
+	pattern := basePath + ".*.gz"
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return
+	}
+
+	if len(matches) <= backupCount {
+		return
+	}
+
+	for i := 0; i < len(matches)-backupCount; i++ {
+		os.Remove(matches[i])
+	}
+}
+
+func (rf *RotatingFile) openCurrentFile() error {
+	file, err := os.OpenFile(rf.basePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+
+	info, err := file.Stat()
+	if err != nil {
+		file.Close()
+		return err
+	}
+
+	rf.currentFile = file
+	rf.currentSize = info.Size()
+	return nil
+}
+
+func (rf *RotatingFile) Close() error {
+	if rf.currentFile != nil {
+		return rf.currentFile.Close()
+	}
+	return nil
 }
