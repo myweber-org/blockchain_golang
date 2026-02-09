@@ -55,4 +55,48 @@ func (al *ActivityLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	duration := time.Since(start)
 	log.Printf("Activity: %s %s | IP: %s | Agent: %s | Duration: %v", 
 		method, path, clientIP, userAgent, duration)
+}package middleware
+
+import (
+	"log"
+	"net/http"
+	"time"
+)
+
+type ActivityLogger struct {
+	handler http.Handler
+}
+
+func NewActivityLogger(handler http.Handler) *ActivityLogger {
+	return &ActivityLogger{handler: handler}
+}
+
+func (al *ActivityLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	start := time.Now()
+	recorder := &responseRecorder{
+		ResponseWriter: w,
+		statusCode:     http.StatusOK,
+	}
+
+	al.handler.ServeHTTP(recorder, r)
+
+	duration := time.Since(start)
+	log.Printf(
+		"%s %s %d %s %s",
+		r.RemoteAddr,
+		r.Method,
+		recorder.statusCode,
+		r.URL.Path,
+		duration,
+	)
+}
+
+type responseRecorder struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (rr *responseRecorder) WriteHeader(code int) {
+	rr.statusCode = code
+	rr.ResponseWriter.WriteHeader(code)
 }
