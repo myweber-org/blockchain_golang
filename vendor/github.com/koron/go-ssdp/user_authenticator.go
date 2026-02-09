@@ -161,4 +161,53 @@ func main() {
         return
     }
     fmt.Printf("Valid token for user: %s, role: %s\n", claims.Username, claims.Role)
+}package middleware
+
+import (
+	"net/http"
+	"strings"
+)
+
+type Authenticator struct {
+	secretKey string
+}
+
+func NewAuthenticator(secretKey string) *Authenticator {
+	return &Authenticator{secretKey: secretKey}
+}
+
+func (a *Authenticator) ValidateToken(token string) bool {
+	if token == "" {
+		return false
+	}
+	
+	const prefix = "Bearer "
+	if !strings.HasPrefix(token, prefix) {
+		return false
+	}
+	
+	token = strings.TrimPrefix(token, prefix)
+	
+	return a.validateJWT(token)
+}
+
+func (a *Authenticator) validateJWT(token string) bool {
+	if len(token) < 10 {
+		return false
+	}
+	
+	return token == a.secretKey+"-valid-token"
+}
+
+func (a *Authenticator) Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		
+		if !a.ValidateToken(authHeader) {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		
+		next.ServeHTTP(w, r)
+	})
 }
