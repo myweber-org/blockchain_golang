@@ -8,16 +8,15 @@ import (
     "time"
 )
 
-type ActivityEvent struct {
+type UserActivity struct {
     UserID    string    `json:"user_id"`
-    EventType string    `json:"event_type"`
+    Action    string    `json:"action"`
     Timestamp time.Time `json:"timestamp"`
     Details   string    `json:"details,omitempty"`
 }
 
 type ActivityLogger struct {
     logFile *os.File
-    encoder *json.Encoder
 }
 
 func NewActivityLogger(filename string) (*ActivityLogger, error) {
@@ -25,20 +24,25 @@ func NewActivityLogger(filename string) (*ActivityLogger, error) {
     if err != nil {
         return nil, err
     }
-    return &ActivityLogger{
-        logFile: file,
-        encoder: json.NewEncoder(file),
-    }, nil
+    return &ActivityLogger{logFile: file}, nil
 }
 
-func (l *ActivityLogger) LogActivity(userID, eventType, details string) error {
-    event := ActivityEvent{
+func (l *ActivityLogger) LogActivity(userID, action, details string) error {
+    activity := UserActivity{
         UserID:    userID,
-        EventType: eventType,
+        Action:    action,
         Timestamp: time.Now().UTC(),
         Details:   details,
     }
-    return l.encoder.Encode(event)
+
+    data, err := json.Marshal(activity)
+    if err != nil {
+        return err
+    }
+
+    data = append(data, '\n')
+    _, err = l.logFile.Write(data)
+    return err
 }
 
 func (l *ActivityLogger) Close() error {
@@ -46,27 +50,21 @@ func (l *ActivityLogger) Close() error {
 }
 
 func main() {
-    logger, err := NewActivityLogger("activity.log")
+    logger, err := NewActivityLogger("user_activities.log")
     if err != nil {
         log.Fatal(err)
     }
     defer logger.Close()
 
-    events := []struct {
-        userID    string
-        eventType string
-        details   string
-    }{
-        {"user_123", "login", "Successful authentication"},
-        {"user_456", "purchase", "Order ID: ORD-78910"},
-        {"user_123", "logout", "Session duration: 15m"},
+    err = logger.LogActivity("user123", "login", "Successful authentication")
+    if err != nil {
+        log.Printf("Failed to log activity: %v", err)
     }
 
-    for _, e := range events {
-        if err := logger.LogActivity(e.userID, e.eventType, e.details); err != nil {
-            fmt.Printf("Failed to log activity: %v\n", err)
-        } else {
-            fmt.Printf("Logged %s event for user %s\n", e.eventType, e.userID)
-        }
+    err = logger.LogActivity("user123", "file_upload", "uploaded profile.jpg")
+    if err != nil {
+        log.Printf("Failed to log activity: %v", err)
     }
+
+    fmt.Println("User activities logged successfully")
 }
