@@ -258,4 +258,95 @@ func main() {
 	for _, r := range cleaned {
 		fmt.Printf("ID: %d, Email: %s, Valid: %v\n", r.ID, r.Email, r.Valid)
 	}
+}package main
+
+import (
+	"encoding/csv"
+	"fmt"
+	"io"
+	"os"
+	"strings"
+)
+
+type DataCleaner struct {
+	InputPath  string
+	OutputPath string
+}
+
+func NewDataCleaner(input, output string) *DataCleaner {
+	return &DataCleaner{
+		InputPath:  input,
+		OutputPath: output,
+	}
+}
+
+func (dc *DataCleaner) Clean() error {
+	inputFile, err := os.Open(dc.InputPath)
+	if err != nil {
+		return fmt.Errorf("failed to open input file: %w", err)
+	}
+	defer inputFile.Close()
+
+	outputFile, err := os.Create(dc.OutputPath)
+	if err != nil {
+		return fmt.Errorf("failed to create output file: %w", err)
+	}
+	defer outputFile.Close()
+
+	reader := csv.NewReader(inputFile)
+	writer := csv.NewWriter(outputFile)
+	defer writer.Flush()
+
+	headers, err := reader.Read()
+	if err != nil {
+		return fmt.Errorf("failed to read headers: %w", err)
+	}
+
+	cleanedHeaders := dc.cleanRow(headers)
+	if err := writer.Write(cleanedHeaders); err != nil {
+		return fmt.Errorf("failed to write headers: %w", err)
+	}
+
+	for {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("failed to read record: %w", err)
+		}
+
+		cleanedRecord := dc.cleanRow(record)
+		if err := writer.Write(cleanedRecord); err != nil {
+			return fmt.Errorf("failed to write record: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (dc *DataCleaner) cleanRow(row []string) []string {
+	cleaned := make([]string, len(row))
+	for i, value := range row {
+		cleaned[i] = strings.TrimSpace(value)
+		if cleaned[i] == "" {
+			cleaned[i] = "N/A"
+		}
+	}
+	return cleaned
+}
+
+func main() {
+	if len(os.Args) < 3 {
+		fmt.Println("Usage: data_cleaner <input.csv> <output.csv>")
+		os.Exit(1)
+	}
+
+	cleaner := NewDataCleaner(os.Args[1], os.Args[2])
+	if err := cleaner.Clean(); err != nil {
+		fmt.Printf("Error cleaning data: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Data cleaning completed successfully")
 }
