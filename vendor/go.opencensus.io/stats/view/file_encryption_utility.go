@@ -105,3 +105,88 @@ func main() {
 	}
 	fmt.Printf("Decrypted: %s\n", decrypted)
 }
+package main
+
+import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"io"
+	"os"
+)
+
+func deriveKey(passphrase string) []byte {
+	hash := sha256.Sum256([]byte(passphrase))
+	return hash[:]
+}
+
+func encrypt(plaintext []byte, passphrase string) (string, error) {
+	key := deriveKey(passphrase)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return "", err
+	}
+
+	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
+	return hex.EncodeToString(ciphertext), nil
+}
+
+func decrypt(encrypted string, passphrase string) ([]byte, error) {
+	data, err := hex.DecodeString(encrypted)
+	if err != nil {
+		return nil, err
+	}
+
+	key := deriveKey(passphrase)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	nonceSize := gcm.NonceSize()
+	if len(data) < nonceSize {
+		return nil, fmt.Errorf("ciphertext too short")
+	}
+
+	nonce, ciphertext := data[:nonceSize], data[nonceSize:]
+	return gcm.Open(nil, nonce, ciphertext, nil)
+}
+
+func main() {
+	secretMessage := "Sensitive data requiring protection"
+	password := "securePass123"
+
+	fmt.Println("Original:", secretMessage)
+
+	encrypted, err := encrypt([]byte(secretMessage), password)
+	if err != nil {
+		fmt.Println("Encryption error:", err)
+		os.Exit(1)
+	}
+	fmt.Println("Encrypted:", encrypted)
+
+	decrypted, err := decrypt(encrypted, password)
+	if err != nil {
+		fmt.Println("Decryption error:", err)
+		os.Exit(1)
+	}
+	fmt.Println("Decrypted:", string(decrypted))
+}
