@@ -1,71 +1,42 @@
 package main
 
 import (
-	"errors"
-	"strings"
-	"unicode"
+	"encoding/json"
+	"fmt"
+	"log"
 )
 
 type UserData struct {
-	Username string
-	Email    string
-	Age      int
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
+	Email string `json:"email"`
 }
 
-func ValidateUsername(username string) error {
-	if len(username) < 3 || len(username) > 20 {
-		return errors.New("username must be between 3 and 20 characters")
+func ValidateJSON(rawData []byte) (*UserData, error) {
+	var user UserData
+	err := json.Unmarshal(rawData, &user)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse JSON: %w", err)
 	}
-	for _, r := range username {
-		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '-' {
-			return errors.New("username can only contain letters, digits, underscores, and hyphens")
-		}
+
+	if user.ID <= 0 {
+		return nil, fmt.Errorf("invalid user ID: %d", user.ID)
 	}
-	return nil
+	if user.Name == "" {
+		return nil, fmt.Errorf("user name cannot be empty")
+	}
+	if user.Email == "" {
+		return nil, fmt.Errorf("user email cannot be empty")
+	}
+
+	return &user, nil
 }
 
-func NormalizeEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
-}
-
-func ValidateEmail(email string) error {
-	email = NormalizeEmail(email)
-	if !strings.Contains(email, "@") {
-		return errors.New("invalid email format")
+func main() {
+	jsonInput := `{"id": 123, "name": "John Doe", "email": "john@example.com"}`
+	user, err := ValidateJSON([]byte(jsonInput))
+	if err != nil {
+		log.Fatalf("Validation error: %v", err)
 	}
-	if strings.Count(email, "@") != 1 {
-		return errors.New("invalid email format")
-	}
-	parts := strings.Split(email, "@")
-	if len(parts[0]) == 0 || len(parts[1]) == 0 {
-		return errors.New("invalid email format")
-	}
-	if !strings.Contains(parts[1], ".") {
-		return errors.New("invalid email format")
-	}
-	return nil
-}
-
-func ValidateAge(age int) error {
-	if age < 0 || age > 150 {
-		return errors.New("age must be between 0 and 150")
-	}
-	return nil
-}
-
-func ProcessUserData(username, email string, age int) (*UserData, error) {
-	if err := ValidateUsername(username); err != nil {
-		return nil, err
-	}
-	if err := ValidateEmail(email); err != nil {
-		return nil, err
-	}
-	if err := ValidateAge(age); err != nil {
-		return nil, err
-	}
-	return &UserData{
-		Username: username,
-		Email:    NormalizeEmail(email),
-		Age:      age,
-	}, nil
+	fmt.Printf("Valid user: %+v\n", user)
 }
