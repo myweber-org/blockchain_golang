@@ -81,4 +81,113 @@ func CalculateAverageID(users []UserData) float64 {
 	}
 	
 	return float64(sum) / float64(len(users))
+}package main
+
+import (
+    "encoding/csv"
+    "errors"
+    "io"
+    "os"
+    "strconv"
+    "strings"
+)
+
+type DataRecord struct {
+    ID        int
+    Name      string
+    Value     float64
+    Timestamp string
+}
+
+func ParseCSVFile(filename string) ([]DataRecord, error) {
+    file, err := os.Open(filename)
+    if err != nil {
+        return nil, err
+    }
+    defer file.Close()
+
+    reader := csv.NewReader(file)
+    records := make([]DataRecord, 0)
+
+    for {
+        row, err := reader.Read()
+        if err == io.EOF {
+            break
+        }
+        if err != nil {
+            return nil, err
+        }
+
+        if len(row) != 4 {
+            continue
+        }
+
+        id, err := strconv.Atoi(strings.TrimSpace(row[0]))
+        if err != nil {
+            continue
+        }
+
+        name := strings.TrimSpace(row[1])
+
+        value, err := strconv.ParseFloat(strings.TrimSpace(row[2]), 64)
+        if err != nil {
+            continue
+        }
+
+        timestamp := strings.TrimSpace(row[3])
+
+        record := DataRecord{
+            ID:        id,
+            Name:      name,
+            Value:     value,
+            Timestamp: timestamp,
+        }
+
+        records = append(records, record)
+    }
+
+    return records, nil
+}
+
+func ValidateRecord(record DataRecord) error {
+    if record.ID <= 0 {
+        return errors.New("invalid ID")
+    }
+
+    if record.Name == "" {
+        return errors.New("name cannot be empty")
+    }
+
+    if record.Value < 0 {
+        return errors.New("value cannot be negative")
+    }
+
+    if record.Timestamp == "" {
+        return errors.New("timestamp cannot be empty")
+    }
+
+    return nil
+}
+
+func CalculateAverage(records []DataRecord) float64 {
+    if len(records) == 0 {
+        return 0
+    }
+
+    var sum float64
+    for _, record := range records {
+        sum += record.Value
+    }
+
+    return sum / float64(len(records))
+}
+
+func FilterByThreshold(records []DataRecord, threshold float64) []DataRecord {
+    filtered := make([]DataRecord, 0)
+    for _, record := range records {
+        if record.Value >= threshold {
+            filtered = append(filtered, record)
+        }
+    }
+    return filtered
 }
