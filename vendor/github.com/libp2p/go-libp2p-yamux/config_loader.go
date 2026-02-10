@@ -52,4 +52,80 @@ func ValidateConfig(config *AppConfig) bool {
 	}
 
 	return true
+}package config
+
+import (
+    "fmt"
+    "os"
+    "strconv"
+    "strings"
+)
+
+type AppConfig struct {
+    Port        int
+    DatabaseURL string
+    LogLevel    string
+    CacheTTL    int
+}
+
+func LoadConfig() (*AppConfig, error) {
+    config := &AppConfig{
+        Port:        getEnvAsInt("APP_PORT", 8080),
+        DatabaseURL: getEnv("DATABASE_URL", "postgres://localhost:5432/app"),
+        LogLevel:    getEnv("LOG_LEVEL", "info"),
+        CacheTTL:    getEnvAsInt("CACHE_TTL", 300),
+    }
+
+    if err := validateConfig(config); err != nil {
+        return nil, fmt.Errorf("config validation failed: %w", err)
+    }
+
+    return config, nil
+}
+
+func getEnv(key, defaultValue string) string {
+    if value, exists := os.LookupEnv(key); exists {
+        return value
+    }
+    return defaultValue
+}
+
+func getEnvAsInt(key string, defaultValue int) int {
+    strValue := getEnv(key, "")
+    if strValue == "" {
+        return defaultValue
+    }
+
+    value, err := strconv.Atoi(strValue)
+    if err != nil {
+        return defaultValue
+    }
+    return value
+}
+
+func validateConfig(config *AppConfig) error {
+    if config.Port < 1 || config.Port > 65535 {
+        return fmt.Errorf("invalid port number: %d", config.Port)
+    }
+
+    if !strings.HasPrefix(config.DatabaseURL, "postgres://") {
+        return fmt.Errorf("invalid database URL format")
+    }
+
+    validLogLevels := map[string]bool{
+        "debug": true,
+        "info":  true,
+        "warn":  true,
+        "error": true,
+    }
+
+    if !validLogLevels[config.LogLevel] {
+        return fmt.Errorf("invalid log level: %s", config.LogLevel)
+    }
+
+    if config.CacheTTL < 0 {
+        return fmt.Errorf("cache TTL cannot be negative")
+    }
+
+    return nil
 }
