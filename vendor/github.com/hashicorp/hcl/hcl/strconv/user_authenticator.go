@@ -46,4 +46,63 @@ func Authenticate(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}package middleware
+
+import (
+	"net/http"
+	"strings"
+)
+
+type UserAuthenticator struct {
+	secretKey []byte
+}
+
+func NewUserAuthenticator(secret string) *UserAuthenticator {
+	return &UserAuthenticator{
+		secretKey: []byte(secret),
+	}
+}
+
+func (ua *UserAuthenticator) ValidateToken(tokenString string) (bool, error) {
+	if tokenString == "" {
+		return false, nil
+	}
+
+	// Simulate token validation logic
+	// In real implementation, use proper JWT library
+	validPrefix := "valid_"
+	if strings.HasPrefix(tokenString, validPrefix) {
+		return true, nil
+	}
+	return false, nil
+}
+
+func (ua *UserAuthenticator) Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "Authorization header required", http.StatusUnauthorized)
+			return
+		}
+
+		tokenParts := strings.Split(authHeader, "Bearer ")
+		if len(tokenParts) != 2 {
+			http.Error(w, "Invalid authorization format", http.StatusUnauthorized)
+			return
+		}
+
+		token := tokenParts[1]
+		valid, err := ua.ValidateToken(token)
+		if err != nil {
+			http.Error(w, "Token validation error", http.StatusInternalServerError)
+			return
+		}
+
+		if !valid {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
