@@ -1,52 +1,45 @@
+
 package main
 
 import (
 	"fmt"
-	"strings"
+	"sort"
 )
 
-type DataCleaner struct {
-	seen map[string]bool
+type DataRecord struct {
+	ID   int
+	Name string
 }
 
-func NewDataCleaner() *DataCleaner {
-	return &DataCleaner{
-		seen: make(map[string]bool),
-	}
-}
+func CleanData(records []DataRecord) []DataRecord {
+	seen := make(map[int]bool)
+	var unique []DataRecord
 
-func (dc *DataCleaner) Normalize(input string) string {
-	return strings.ToLower(strings.TrimSpace(input))
-}
-
-func (dc *DataCleaner) IsDuplicate(value string) bool {
-	normalized := dc.Normalize(value)
-	if dc.seen[normalized] {
-		return true
-	}
-	dc.seen[normalized] = true
-	return false
-}
-
-func (dc *DataCleaner) Deduplicate(values []string) []string {
-	dc.seen = make(map[string]bool)
-	var result []string
-	for _, v := range values {
-		if !dc.IsDuplicate(v) {
-			result = append(result, v)
+	for _, record := range records {
+		if !seen[record.ID] {
+			seen[record.ID] = true
+			unique = append(unique, record)
 		}
 	}
-	return result
+
+	sort.Slice(unique, func(i, j int) bool {
+		return unique[i].ID < unique[j].ID
+	})
+
+	return unique
 }
 
 func main() {
-	cleaner := NewDataCleaner()
-	data := []string{"Apple", "apple ", " BANANA", "banana", "Cherry"}
-	
-	fmt.Println("Original data:", data)
-	deduped := cleaner.Deduplicate(data)
-	fmt.Println("Deduplicated:", deduped)
-	
-	testValue := "  APPLE  "
-	fmt.Printf("Is '%s' duplicate? %v\n", testValue, cleaner.IsDuplicate(testValue))
+	records := []DataRecord{
+		{ID: 3, Name: "Charlie"},
+		{ID: 1, Name: "Alice"},
+		{ID: 2, Name: "Bob"},
+		{ID: 1, Name: "AliceDuplicate"},
+		{ID: 4, Name: "David"},
+	}
+
+	cleaned := CleanData(records)
+	for _, r := range cleaned {
+		fmt.Printf("ID: %d, Name: %s\n", r.ID, r.Name)
+	}
 }
