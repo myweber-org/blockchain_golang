@@ -1,146 +1,131 @@
 package main
 
 import (
-    "encoding/csv"
-    "encoding/json"
-    "fmt"
-    "io"
-    "os"
-    "strconv"
+	"encoding/csv"
+	"fmt"
+	"io"
+	"os"
+	"strconv"
+	"strings"
 )
 
 type Record struct {
-    ID        int     `json:"id"`
-    Name      string  `json:"name"`
-    Value     float64 `json:"value"`
-    Processed bool    `json:"processed"`
+	ID      int
+	Name    string
+	Value   float64
+	Active  bool
 }
 
-func processCSVFile(filename string) ([]Record, error) {
-    file, err := os.Open(filename)
-    if err != nil {
-        return nil, err
-    }
-    defer file.Close()
+func parseCSVFile(filename string) ([]Record, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
 
-    reader := csv.NewReader(file)
-    var records []Record
+	reader := csv.NewReader(file)
+	reader.TrimLeadingSpace = true
 
-    // Skip header
-    _, err = reader.Read()
-    if err != nil {
-        return nil, err
-    }
+	var records []Record
+	lineNumber := 0
 
-    for {
-        row, err := reader.Read()
-        if err == io.EOF {
-            break
-        }
-        if err != nil {
-            return nil, err
-        }
+	for {
+		lineNumber++
+		row, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("csv read error at line %d: %w", lineNumber, err)
+		}
 
-        if len(row) < 4 {
-            continue
-        }
+		if len(row) != 4 {
+			return nil, fmt.Errorf("invalid column count at line %d: expected 4, got %d", lineNumber, len(row))
+		}
 
-        id, err := strconv.Atoi(row[0])
-        if err != nil {
-            continue
-        }
+		id, err := strconv.Atoi(strings.TrimSpace(row[0]))
+		if err != nil {
+			return nil, fmt.Errorf("invalid ID at line %d: %w", lineNumber, err)
+		}
 
-        value, err := strconv.ParseFloat(row[2], 64)
-        if err != nil {
-            continue
-        }
+		name := strings.TrimSpace(row[1])
+		if name == "" {
+			return nil, fmt.Errorf("empty name at line %d", lineNumber)
+		}
 
-        processed, err := strconv.ParseBool(row[3])
-        if err != nil {
-            processed = false
-        }
+		value, err := strconv.ParseFloat(strings.TrimSpace(row[2]), 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value at line %d: %w", lineNumber, err)
+		}
 
-        record := Record{
-            ID:        id,
-            Name:      row[1],
-            Value:     value,
-            Processed: processed,
-        }
-        records = append(records, record)
-    }
+		active, err := strconv.ParseBool(strings.TrimSpace(row[3]))
+		if err != nil {
+			return nil, fmt.Errorf("invalid active flag at line %d: %w", lineNumber, err)
+		}
 
-    return records, nil
+		records = append(records, Record{
+			ID:     id,
+			Name:   name,
+			Value:  value,
+			Active: active,
+		})
+	}
+
+	return records, nil
 }
 
-func convertToJSON(records []Record) (string, error) {
-    jsonData, err := json.MarshalIndent(records, "", "  ")
-    if err != nil {
-        return "", err
-    }
-    return string(jsonData), nil
+func validateRecords(records []Record) error {
+	seenIDs := make(map[int]bool)
+	for _, record := range records {
+		if record.ID <= 0 {
+			return fmt.Errorf("invalid ID %d: must be positive", record.ID)
+		}
+		if seenIDs[record.ID] {
+			return fmt.Errorf("duplicate ID %d found", record.ID)
+		}
+		seenIDs[record.ID] = true
+
+		if record.Value < 0 {
+			return fmt.Errorf("negative value %f for record ID %d", record.Value, record.ID)
+		}
+	}
+	return nil
 }
 
-func filterProcessed(records []Record) []Record {
-    var filtered []Record
-    for _, record := range records {
-        if record.Processed {
-            filtered = append(filtered, record)
-        }
-    }
-    return filtered
-}
+func processData(filename string) error {
+	records, err := parseCSVFile(filename)
+	if err != nil {
+		return fmt.Errorf("parsing failed: %w", err)
+	}
 
-func calculateTotal(records []Record) float64 {
-    var total float64
-    for _, record := range records {
-        total += record.Value
-    }
-    return total
-}
+	if err := validateRecords(records); err != nil {
+		return fmt.Errorf("validation failed: %w", err)
+	}
 
-func main() {
-    if len(os.Args) < 2 {
-        fmt.Println("Usage: data_processor <csv_file>")
-        return
-    }
+	totalValue := 0.0
+	activeCount := 0
+	for _, record := range records {
+		totalValue += record.Value
+		if record.Active {
+			activeCount++
+		}
+	}
 
-    records, err := processCSVFile(os.Args[1])
-    if err != nil {
-        fmt.Printf("Error processing file: %v\n", err)
-        return
-    }
+	fmt.Printf("Processed %d records\n", len(records))
+	fmt.Printf("Total value: %.2f\n", totalValue)
+	fmt.Printf("Active records: %d\n", activeCount)
 
-    fmt.Printf("Total records: %d\n", len(records))
-    fmt.Printf("Total value: %.2f\n", calculateTotal(records))
-
-    processedRecords := filterProcessed(records)
-    fmt.Printf("Processed records: %d\n", len(processedRecords))
-
-    jsonOutput, err := convertToJSON(processedRecords)
-    if err != nil {
-        fmt.Printf("Error converting to JSON: %v\n", err)
-        return
-    }
-
-    fmt.Println("\nJSON Output:")
-    fmt.Println(jsonOutput)
-}
-package main
-
-import "fmt"
-
-func FilterAndDouble(numbers []int, threshold int) []int {
-    var result []int
-    for _, num := range numbers {
-        if num > threshold {
-            result = append(result, num*2)
-        }
-    }
-    return result
+	return nil
 }
 
 func main() {
-    input := []int{1, 5, 10, 15, 20}
-    output := FilterAndDouble(input, 8)
-    fmt.Printf("Processed slice: %v\n", output)
+	if len(os.Args) != 2 {
+		fmt.Println("Usage: data_processor <csv_file>")
+		os.Exit(1)
+	}
+
+	if err := processData(os.Args[1]); err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
 }
