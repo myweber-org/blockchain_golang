@@ -127,4 +127,122 @@ func main() {
 	}
 
 	fmt.Println("Log rotation test completed")
+}package main
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"time"
+)
+
+const (
+	maxFileSize = 10 * 1024 * 1024 // 10MB
+	maxBackups  = 5
+)
+
+type RotatingWriter struct {
+	currentFile *os.File
+	currentSize int64
+	basePath    string
+	backupCount int
+}
+
+func NewRotatingWriter(path string) (*RotatingWriter, error) {
+	writer := &RotatingWriter{
+		basePath: path,
+	}
+	if err := writer.openCurrentFile(); err != nil {
+		return nil, err
+	}
+	return writer, nil
+}
+
+func (rw *RotatingWriter) Write(p []byte) (int, error) {
+	if rw.currentSize+int64(len(p)) > maxFileSize {
+		if err := rw.rotate(); err != nil {
+			return 0, err
+		}
+	}
+
+	n, err := rw.currentFile.Write(p)
+	if err == nil {
+		rw.currentSize += int64(n)
+	}
+	return n, err
+}
+
+func (rw *RotatingWriter) rotate() error {
+	if rw.currentFile != nil {
+		rw.currentFile.Close()
+	}
+
+	timestamp := time.Now().Format("20060102_150405")
+	backupPath := fmt.Sprintf("%s.%s", rw.basePath, timestamp)
+
+	if err := os.Rename(rw.basePath, backupPath); err != nil {
+		return err
+	}
+
+	rw.backupCount++
+	if rw.backupCount > maxBackups {
+		rw.cleanOldBackups()
+	}
+
+	return rw.openCurrentFile()
+}
+
+func (rw *RotatingWriter) openCurrentFile() error {
+	file, err := os.OpenFile(rw.basePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+
+	info, err := file.Stat()
+	if err != nil {
+		file.Close()
+		return err
+	}
+
+	rw.currentFile = file
+	rw.currentSize = info.Size()
+	return nil
+}
+
+func (rw *RotatingWriter) cleanOldBackups() {
+	pattern := rw.basePath + ".*"
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return
+	}
+
+	if len(matches) > maxBackups {
+		for i := 0; i < len(matches)-maxBackups; i++ {
+			os.Remove(matches[i])
+		}
+	}
+}
+
+func (rw *RotatingWriter) Close() error {
+	if rw.currentFile != nil {
+		return rw.currentFile.Close()
+	}
+	return nil
+}
+
+func main() {
+	writer, err := NewRotatingWriter("app.log")
+	if err != nil {
+		fmt.Printf("Failed to create writer: %v\n", err)
+		return
+	}
+	defer writer.Close()
+
+	for i := 0; i < 1000; i++ {
+		logEntry := fmt.Sprintf("[%s] Log entry %d: Some sample log data here\n",
+			time.Now().Format(time.RFC3339), i)
+		writer.Write([]byte(logEntry))
+		time.Sleep(10 * time.Millisecond)
+	}
 }
