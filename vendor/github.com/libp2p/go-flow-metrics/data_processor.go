@@ -103,3 +103,26 @@ func CalculateAverage(records []DataRecord) float64 {
 
     return total / float64(len(records))
 }
+package main
+
+import (
+	"regexp"
+	"strings"
+)
+
+func ProcessInput(input string) (string, error) {
+	if input == "" {
+		return "", nil
+	}
+
+	trimmed := strings.TrimSpace(input)
+
+	re := regexp.MustCompile(`[^a-zA-Z0-9\s\-_]`)
+	cleaned := re.ReplaceAllString(trimmed, "")
+
+	if len(cleaned) > 100 {
+		cleaned = cleaned[:100]
+	}
+
+	return cleaned, nil
+}
