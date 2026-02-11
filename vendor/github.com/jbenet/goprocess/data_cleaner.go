@@ -105,3 +105,88 @@ func main() {
 		fmt.Printf("ID: %d, Email: %s, Valid: %t\n", r.ID, r.Email, r.Valid)
 	}
 }
+package main
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+)
+
+type Record struct {
+	ID    int
+	Email string
+	Valid bool
+}
+
+func DeduplicateEmails(records []Record) []Record {
+	seen := make(map[string]bool)
+	var unique []Record
+
+	for _, record := range records {
+		email := strings.ToLower(strings.TrimSpace(record.Email))
+		if !seen[email] && email != "" {
+			seen[email] = true
+			unique = append(unique, Record{
+				ID:    len(unique) + 1,
+				Email: email,
+				Valid: record.Valid,
+			})
+		}
+	}
+	return unique
+}
+
+func ValidateEmailFormat(email string) error {
+	if email == "" {
+		return errors.New("email cannot be empty")
+	}
+	if !strings.Contains(email, "@") {
+		return errors.New("email must contain @ symbol")
+	}
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return errors.New("invalid email format")
+	}
+	if !strings.Contains(parts[1], ".") {
+		return errors.New("domain must contain a dot")
+	}
+	return nil
+}
+
+func CleanRecords(records []Record) ([]Record, error) {
+	cleaned := DeduplicateEmails(records)
+	for i := range cleaned {
+		if err := ValidateEmailFormat(cleaned[i].Email); err != nil {
+			cleaned[i].Valid = false
+		} else {
+			cleaned[i].Valid = true
+		}
+	}
+	return cleaned, nil
+}
+
+func main() {
+	sampleData := []Record{
+		{1, "user@example.com", true},
+		{2, "USER@example.com", true},
+		{3, "invalid-email", true},
+		{4, "another@test.org", true},
+		{5, "", true},
+	}
+
+	cleaned, err := CleanRecords(sampleData)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	fmt.Println("Cleaned Records:")
+	for _, record := range cleaned {
+		status := "Valid"
+		if !record.Valid {
+			status = "Invalid"
+		}
+		fmt.Printf("ID: %d, Email: %s, Status: %s\n", record.ID, record.Email, status)
+	}
+}
