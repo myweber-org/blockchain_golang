@@ -43,4 +43,27 @@ func main() {
 	cleaned := RemoveDuplicates(data)
 	fmt.Printf("Original: %v\n", data)
 	fmt.Printf("Cleaned: %v\n", cleaned)
+}package main
+
+import (
+	"regexp"
+	"strings"
+)
+
+func SanitizeCSVField(input string) string {
+	if input == "" {
+		return input
+	}
+
+	input = strings.TrimSpace(input)
+
+	re := regexp.MustCompile(`[\r\n]+`)
+	input = re.ReplaceAllString(input, " ")
+
+	re = regexp.MustCompile(`[,"]`)
+	if re.MatchString(input) {
+		input = `"` + strings.ReplaceAll(input, `"`, `""`) + `"`
+	}
+
+	return input
 }
