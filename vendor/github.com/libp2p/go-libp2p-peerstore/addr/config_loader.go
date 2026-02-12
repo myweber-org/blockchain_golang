@@ -1,85 +1,36 @@
 package config
 
 import (
-    "fmt"
-    "io/ioutil"
-    "os"
-
-    "gopkg.in/yaml.v2"
-)
-
-type DatabaseConfig struct {
-    Host     string `yaml:"host"`
-    Port     int    `yaml:"port"`
-    Username string `yaml:"username"`
-    Password string `yaml:"password"`
-    Name     string `yaml:"name"`
-}
-
-type ServerConfig struct {
-    Port         int            `yaml:"port"`
-    Debug        bool           `yaml:"debug"`
-    ReadTimeout  int            `yaml:"read_timeout"`
-    WriteTimeout int            `yaml:"write_timeout"`
-    Database     DatabaseConfig `yaml:"database"`
-}
-
-func LoadConfig(path string) (*ServerConfig, error) {
-    if _, err := os.Stat(path); os.IsNotExist(err) {
-        return nil, fmt.Errorf("config file not found: %s", path)
-    }
-
-    data, err := ioutil.ReadFile(path)
-    if err != nil {
-        return nil, fmt.Errorf("failed to read config file: %v", err)
-    }
-
-    var config ServerConfig
-    if err := yaml.Unmarshal(data, &config); err != nil {
-        return nil, fmt.Errorf("failed to parse YAML: %v", err)
-    }
-
-    if config.Server.Port == 0 {
-        config.Server.Port = 8080
-    }
-
-    return &config, nil
-}
-
-func ValidateConfig(config *ServerConfig) error {
-    if config.Database.Host == "" {
-        return fmt.Errorf("database host is required")
-    }
-    if config.Database.Port < 1 || config.Database.Port > 65535 {
-        return fmt.Errorf("database port must be between 1 and 65535")
-    }
-    if config.Server.Port < 1 || config.Server.Port > 65535 {
-        return fmt.Errorf("server port must be between 1 and 65535")
-    }
-    return nil
-}package config
-
-import (
+	"errors"
+	"io"
 	"os"
-	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
 	Server struct {
-		Host string `yaml:"host" env:"SERVER_HOST"`
-		Port int    `yaml:"port" env:"SERVER_PORT"`
+		Host string `yaml:"host"`
+		Port int    `yaml:"port"`
 	} `yaml:"server"`
 	Database struct {
-		URL      string `yaml:"url" env:"DB_URL"`
-		PoolSize int    `yaml:"pool_size" env:"DB_POOL_SIZE"`
+		Driver   string `yaml:"driver"`
+		Host     string `yaml:"host"`
+		Username string `yaml:"username"`
+		Password string `yaml:"password"`
+		Name     string `yaml:"name"`
 	} `yaml:"database"`
-	LogLevel string `yaml:"log_level" env:"LOG_LEVEL"`
+	LogLevel string `yaml:"log_level"`
 }
 
-func LoadConfig(configPath string) (*Config, error) {
-	data, err := os.ReadFile(configPath)
+func LoadConfig(path string) (*Config, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
 	if err != nil {
 		return nil, err
 	}
@@ -89,38 +40,25 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, err
 	}
 
-	overrideFromEnv(&cfg)
+	if err := validateConfig(&cfg); err != nil {
+		return nil, err
+	}
+
 	return &cfg, nil
 }
 
-func overrideFromEnv(cfg *Config) {
-	if val := os.Getenv("SERVER_HOST"); val != "" {
-		cfg.Server.Host = val
+func validateConfig(cfg *Config) error {
+	if cfg.Server.Host == "" {
+		return errors.New("server host cannot be empty")
 	}
-	if val := os.Getenv("SERVER_PORT"); val != "" {
-		port := 0
-		fmt.Sscanf(val, "%d", &port)
-		if port > 0 {
-			cfg.Server.Port = port
-		}
+	if cfg.Server.Port <= 0 || cfg.Server.Port > 65535 {
+		return errors.New("server port must be between 1 and 65535")
 	}
-	if val := os.Getenv("DB_URL"); val != "" {
-		cfg.Database.URL = val
+	if cfg.Database.Driver == "" {
+		return errors.New("database driver cannot be empty")
 	}
-	if val := os.Getenv("DB_POOL_SIZE"); val != "" {
-		size := 0
-		fmt.Sscanf(val, "%d", &size)
-		if size > 0 {
-			cfg.Database.PoolSize = size
-		}
+	if cfg.LogLevel == "" {
+		cfg.LogLevel = "info"
 	}
-	if val := os.Getenv("LOG_LEVEL"); val != "" {
-		cfg.LogLevel = val
-	}
-}
-
-func DefaultConfigPath() string {
-	exe, _ := os.Executable()
-	dir := filepath.Dir(exe)
-	return filepath.Join(dir, "config.yaml")
+	return nil
 }
