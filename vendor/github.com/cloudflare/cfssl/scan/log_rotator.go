@@ -303,3 +303,128 @@ func main() {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+package main
+
+import (
+    "compress/gzip"
+    "fmt"
+    "io"
+    "os"
+    "path/filepath"
+    "time"
+)
+
+const (
+    maxLogSize    = 10 * 1024 * 1024 // 10MB
+    maxBackupFiles = 5
+)
+
+type RotatingLogger struct {
+    filename    string
+    currentSize int64
+    file        *os.File
+}
+
+func NewRotatingLogger(filename string) (*RotatingLogger, error) {
+    rl := &RotatingLogger{filename: filename}
+    if err := rl.openFile(); err != nil {
+        return nil, err
+    }
+    return rl, nil
+}
+
+func (rl *RotatingLogger) Write(p []byte) (int, error) {
+    if rl.currentSize+int64(len(p)) > maxLogSize {
+        if err := rl.rotate(); err != nil {
+            return 0, err
+        }
+    }
+
+    n, err := rl.file.Write(p)
+    if err == nil {
+        rl.currentSize += int64(n)
+    }
+    return n, err
+}
+
+func (rl *RotatingLogger) rotate() error {
+    if err := rl.file.Close(); err != nil {
+        return err
+    }
+
+    timestamp := time.Now().Format("20060102_150405")
+    backupName := fmt.Sprintf("%s.%s.gz", rl.filename, timestamp)
+
+    if err := compressFile(rl.filename, backupName); err != nil {
+        return err
+    }
+
+    if err := cleanupOldBackups(rl.filename); err != nil {
+        return err
+    }
+
+    return rl.openFile()
+}
+
+func compressFile(source, target string) error {
+    src, err := os.Open(source)
+    if err != nil {
+        return err
+    }
+    defer src.Close()
+
+    dst, err := os.Create(target)
+    if err != nil {
+        return err
+    }
+    defer dst.Close()
+
+    gz := gzip.NewWriter(dst)
+    defer gz.Close()
+
+    _, err = io.Copy(gz, src)
+    return err
+}
+
+func cleanupOldBackups(baseFilename string) error {
+    pattern := baseFilename + ".*.gz"
+    matches, err := filepath.Glob(pattern)
+    if err != nil {
+        return err
+    }
+
+    if len(matches) <= maxBackupFiles {
+        return nil
+    }
+
+    for i := 0; i < len(matches)-maxBackupFiles; i++ {
+        if err := os.Remove(matches[i]); err != nil {
+            return err
+        }
+    }
+    return nil
+}
+
+func (rl *RotatingLogger) openFile() error {
+    file, err := os.OpenFile(rl.filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+    if err != nil {
+        return err
+    }
+
+    info, err := file.Stat()
+    if err != nil {
+        file.Close()
+        return err
+    }
+
+    rl.file = file
+    rl.currentSize = info.Size()
+    return nil
+}
+
+func (rl *RotatingLogger) Close() error {
+    if rl.file != nil {
+        return rl.file.Close()
+    }
+    return nil
+}
