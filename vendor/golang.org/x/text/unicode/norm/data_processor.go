@@ -1,49 +1,108 @@
+
 package main
 
 import (
-	"errors"
-	"regexp"
-	"strings"
+	"encoding/csv"
+	"fmt"
+	"io"
+	"os"
+	"strconv"
 )
 
-type UserData struct {
-	Email     string
-	Username  string
-	Age       int
+type Record struct {
+	ID    int
+	Name  string
+	Value float64
 }
 
-var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+func processCSV(filename string) ([]Record, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
 
-func ValidateUserData(data UserData) error {
-	if strings.TrimSpace(data.Email) == "" {
-		return errors.New("email cannot be empty")
+	reader := csv.NewReader(file)
+	records := []Record{}
+	lineNum := 0
+
+	for {
+		line, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("csv read error: %w", err)
+		}
+
+		lineNum++
+		if lineNum == 1 {
+			continue
+		}
+
+		if len(line) != 3 {
+			return nil, fmt.Errorf("invalid column count on line %d", lineNum)
+		}
+
+		id, err := strconv.Atoi(line[0])
+		if err != nil {
+			return nil, fmt.Errorf("invalid ID on line %d: %w", lineNum, err)
+		}
+
+		name := line[1]
+		if name == "" {
+			return nil, fmt.Errorf("empty name on line %d", lineNum)
+		}
+
+		value, err := strconv.ParseFloat(line[2], 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value on line %d: %w", lineNum, err)
+		}
+
+		records = append(records, Record{
+			ID:    id,
+			Name:  name,
+			Value: value,
+		})
 	}
-	if !emailRegex.MatchString(data.Email) {
-		return errors.New("invalid email format")
-	}
-	if len(strings.TrimSpace(data.Username)) < 3 {
-		return errors.New("username must be at least 3 characters")
-	}
-	if data.Age < 18 || data.Age > 120 {
-		return errors.New("age must be between 18 and 120")
-	}
-	return nil
+
+	return records, nil
 }
 
-func TransformUsername(username string) string {
-	return strings.ToLower(strings.TrimSpace(username))
+func calculateStats(records []Record) (float64, float64) {
+	if len(records) == 0 {
+		return 0, 0
+	}
+
+	var sum float64
+	var max float64 = records[0].Value
+
+	for _, r := range records {
+		sum += r.Value
+		if r.Value > max {
+			max = r.Value
+		}
+	}
+
+	average := sum / float64(len(records))
+	return average, max
 }
 
-func ProcessUserInput(email, username string, age int) (UserData, error) {
-	userData := UserData{
-		Email:    strings.TrimSpace(email),
-		Username: TransformUsername(username),
-		Age:      age,
+func main() {
+	if len(os.Args) < 2 {
+		fmt.Println("Usage: data_processor <csv_file>")
+		os.Exit(1)
 	}
 
-	if err := ValidateUserData(userData); err != nil {
-		return UserData{}, err
+	data, err := processCSV(os.Args[1])
+	if err != nil {
+		fmt.Printf("Error processing file: %v\n", err)
+		os.Exit(1)
 	}
 
-	return userData, nil
+	fmt.Printf("Processed %d records\n", len(data))
+	
+	avg, max := calculateStats(data)
+	fmt.Printf("Average value: %.2f\n", avg)
+	fmt.Printf("Maximum value: %.2f\n", max)
 }
