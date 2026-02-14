@@ -107,4 +107,55 @@ func ActivityLogger(next http.Handler) http.Handler {
 			duration,
 		)
 	})
+}package middleware
+
+import (
+	"log"
+	"net/http"
+	"time"
+)
+
+type ActivityLog struct {
+	Timestamp  time.Time
+	Method     string
+	Path       string
+	RemoteAddr string
+	UserAgent  string
+	StatusCode int
+}
+
+func ActivityLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		lrw := &loggingResponseWriter{ResponseWriter: w}
+
+		next.ServeHTTP(lrw, r)
+
+		activity := ActivityLog{
+			Timestamp:  start,
+			Method:     r.Method,
+			Path:       r.URL.Path,
+			RemoteAddr: r.RemoteAddr,
+			UserAgent:  r.UserAgent(),
+			StatusCode: lrw.statusCode,
+		}
+
+		log.Printf("ACTIVITY: %s %s %s %s %d %v",
+			activity.Timestamp.Format(time.RFC3339),
+			activity.Method,
+			activity.Path,
+			activity.RemoteAddr,
+			activity.StatusCode,
+			time.Since(start))
+	})
+}
+
+type loggingResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (lrw *loggingResponseWriter) WriteHeader(code int) {
+	lrw.statusCode = code
+	lrw.ResponseWriter.WriteHeader(code)
 }
