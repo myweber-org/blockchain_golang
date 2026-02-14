@@ -140,3 +140,66 @@ func ValidateEmailFormat(email string) bool {
 	matched, err := regexp.MatchString(pattern, email)
 	return err == nil && matched
 }
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+type DataRecord struct {
+	ID    int
+	Email string
+	Valid bool
+}
+
+func DeduplicateRecords(records []DataRecord) []DataRecord {
+	seen := make(map[string]bool)
+	var unique []DataRecord
+
+	for _, record := range records {
+		email := strings.ToLower(strings.TrimSpace(record.Email))
+		if !seen[email] {
+			seen[email] = true
+			unique = append(unique, record)
+		}
+	}
+	return unique
+}
+
+func ValidateEmail(email string) bool {
+	if len(email) < 3 || !strings.Contains(email, "@") {
+		return false
+	}
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 || len(parts[0]) == 0 || len(parts[1]) == 0 {
+		return false
+	}
+	return strings.Contains(parts[1], ".")
+}
+
+func ProcessRecords(records []DataRecord) []DataRecord {
+	validRecords := []DataRecord{}
+	for _, record := range records {
+		if ValidateEmail(record.Email) {
+			record.Valid = true
+			validRecords = append(validRecords, record)
+		}
+	}
+	return DeduplicateRecords(validRecords)
+}
+
+func main() {
+	records := []DataRecord{
+		{1, "user@example.com", false},
+		{2, "invalid-email", false},
+		{3, "user@example.com", false},
+		{4, "test@domain.org", false},
+	}
+
+	processed := ProcessRecords(records)
+	fmt.Printf("Processed %d records\n", len(processed))
+	for _, record := range processed {
+		fmt.Printf("ID: %d, Email: %s, Valid: %v\n", record.ID, record.Email, record.Valid)
+	}
+}
