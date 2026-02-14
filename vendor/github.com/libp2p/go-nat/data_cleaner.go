@@ -55,3 +55,40 @@ func main() {
 		fmt.Printf("ID: %d, Email: %s, Valid: %v\n", r.ID, r.Email, r.Valid)
 	}
 }
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+func deduplicateStrings(slice []string) []string {
+	seen := make(map[string]struct{})
+	result := []string{}
+	for _, item := range slice {
+		if _, exists := seen[item]; !exists {
+			seen[item] = struct{}{}
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+func normalizeString(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
+func cleanData(input []string) []string {
+	normalized := make([]string, len(input))
+	for i, v := range input {
+		normalized[i] = normalizeString(v)
+	}
+	return deduplicateStrings(normalized)
+}
+
+func main() {
+	sample := []string{"  Apple", "banana", "apple", " Banana ", "cherry"}
+	cleaned := cleanData(sample)
+	fmt.Println("Original:", sample)
+	fmt.Println("Cleaned:", cleaned)
+}
