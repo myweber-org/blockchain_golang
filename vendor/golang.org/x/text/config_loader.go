@@ -101,4 +101,108 @@ func ValidateConfig(config *AppConfig) error {
         return fmt.Errorf("write timeout cannot be negative")
     }
     return nil
+}package config
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+)
+
+type DatabaseConfig struct {
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Database string `json:"database"`
+}
+
+type ServerConfig struct {
+	Port         int    `json:"port"`
+	ReadTimeout  int    `json:"read_timeout"`
+	WriteTimeout int    `json:"write_timeout"`
+	DebugMode    bool   `json:"debug_mode"`
+	LogLevel     string `json:"log_level"`
+}
+
+type AppConfig struct {
+	Server   ServerConfig   `json:"server"`
+	Database DatabaseConfig `json:"database"`
+	Features []string       `json:"features"`
+}
+
+func LoadConfig(configPath string) (*AppConfig, error) {
+	if configPath == "" {
+		configPath = filepath.Join("config", "app.json")
+	}
+
+	file, err := os.Open(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open config file: %w", err)
+	}
+	defer file.Close()
+
+	var config AppConfig
+	decoder := json.NewDecoder(file)
+	if err := decoder.Decode(&config); err != nil {
+		return nil, fmt.Errorf("failed to decode config: %w", err)
+	}
+
+	if err := validateConfig(&config); err != nil {
+		return nil, fmt.Errorf("config validation failed: %w", err)
+	}
+
+	setDefaults(&config)
+	return &config, nil
+}
+
+func validateConfig(config *AppConfig) error {
+	if config.Server.Port <= 0 || config.Server.Port > 65535 {
+		return fmt.Errorf("invalid server port: %d", config.Server.Port)
+	}
+
+	if config.Database.Host == "" {
+		return fmt.Errorf("database host cannot be empty")
+	}
+
+	if config.Database.Port <= 0 || config.Database.Port > 65535 {
+		return fmt.Errorf("invalid database port: %d", config.Database.Port)
+	}
+
+	if config.Server.LogLevel != "" {
+		validLevels := map[string]bool{
+			"debug": true,
+			"info":  true,
+			"warn":  true,
+			"error": true,
+		}
+		if !validLevels[config.Server.LogLevel] {
+			return fmt.Errorf("invalid log level: %s", config.Server.LogLevel)
+		}
+	}
+
+	return nil
+}
+
+func setDefaults(config *AppConfig) {
+	if config.Server.Port == 0 {
+		config.Server.Port = 8080
+	}
+
+	if config.Server.ReadTimeout == 0 {
+		config.Server.ReadTimeout = 30
+	}
+
+	if config.Server.WriteTimeout == 0 {
+		config.Server.WriteTimeout = 30
+	}
+
+	if config.Server.LogLevel == "" {
+		config.Server.LogLevel = "info"
+	}
+
+	if config.Database.Port == 0 {
+		config.Database.Port = 5432
+	}
 }
