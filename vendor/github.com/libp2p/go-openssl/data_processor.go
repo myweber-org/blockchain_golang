@@ -58,3 +58,63 @@ func ProcessUserInput(rawUsername, rawEmail string, rawAge int) (UserData, error
 
     return userData, nil
 }
+package main
+
+import (
+	"errors"
+	"regexp"
+	"strings"
+)
+
+type DataRecord struct {
+	ID    string
+	Email string
+	Value float64
+}
+
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+
+func ValidateRecord(record DataRecord) error {
+	if record.ID == "" {
+		return errors.New("ID cannot be empty")
+	}
+	if !emailRegex.MatchString(record.Email) {
+		return errors.New("invalid email format")
+	}
+	if record.Value < 0 {
+		return errors.New("value must be non-negative")
+	}
+	return nil
+}
+
+func NormalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+func TransformRecord(record DataRecord) (DataRecord, error) {
+	if err := ValidateRecord(record); err != nil {
+		return DataRecord{}, err
+	}
+	
+	return DataRecord{
+		ID:    strings.ToUpper(record.ID),
+		Email: NormalizeEmail(record.Email),
+		Value: record.Value * 1.1,
+	}, nil
+}
+
+func ProcessRecords(records []DataRecord) ([]DataRecord, []error) {
+	var processed []DataRecord
+	var errs []error
+	
+	for i, record := range records {
+		transformed, err := TransformRecord(record)
+		if err != nil {
+			errs = append(errs, errors.New("record " + record.ID + " at index " + string(rune(i)) + ": " + err.Error()))
+			continue
+		}
+		processed = append(processed, transformed)
+	}
+	
+	return processed, errs
+}
