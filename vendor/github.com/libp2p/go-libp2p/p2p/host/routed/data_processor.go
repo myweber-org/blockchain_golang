@@ -144,4 +144,40 @@ func main() {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
 	}
+}package main
+
+import (
+	"regexp"
+	"strings"
+)
+
+type DataProcessor struct {
+	emailRegex *regexp.Regexp
+}
+
+func NewDataProcessor() *DataProcessor {
+	return &DataProcessor{
+		emailRegex: regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`),
+	}
+}
+
+func (dp *DataProcessor) SanitizeString(input string) string {
+	return strings.TrimSpace(input)
+}
+
+func (dp *DataProcessor) ValidateEmail(email string) bool {
+	return dp.emailRegex.MatchString(email)
+}
+
+func (dp *DataProcessor) ProcessUserData(name, email string) (string, bool) {
+	sanitizedName := dp.SanitizeString(name)
+	if sanitizedName == "" {
+		return "", false
+	}
+
+	if !dp.ValidateEmail(email) {
+		return "", false
+	}
+
+	return sanitizedName, true
 }
