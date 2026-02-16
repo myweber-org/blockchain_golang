@@ -1,116 +1,84 @@
-
 package main
 
 import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 )
 
-func deriveKey(passphrase string) []byte {
-	hash := sha256.Sum256([]byte(passphrase))
-	return hash[:]
-}
-
-func encryptFile(inputPath, outputPath, passphrase string) error {
-	plaintext, err := os.ReadFile(inputPath)
-	if err != nil {
-		return fmt.Errorf("read file error: %v", err)
-	}
-
-	key := deriveKey(passphrase)
+func encryptData(plaintext []byte, key []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return fmt.Errorf("cipher creation error: %v", err)
+		return nil, err
 	}
 
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return fmt.Errorf("GCM creation error: %v", err)
+	ciphertext := make([]byte, aes.BlockSize+len(plaintext))
+	iv := ciphertext[:aes.BlockSize]
+	if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+		return nil, err
 	}
 
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return fmt.Errorf("nonce generation error: %v", err)
-	}
+	stream := cipher.NewCFBEncrypter(block, iv)
+	stream.XORKeyStream(ciphertext[aes.BlockSize:], plaintext)
 
-	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
-
-	if err := os.WriteFile(outputPath, ciphertext, 0644); err != nil {
-		return fmt.Errorf("write file error: %v", err)
-	}
-
-	return nil
+	return ciphertext, nil
 }
 
-func decryptFile(inputPath, outputPath, passphrase string) error {
-	ciphertext, err := os.ReadFile(inputPath)
-	if err != nil {
-		return fmt.Errorf("read file error: %v", err)
-	}
-
-	key := deriveKey(passphrase)
+func decryptData(ciphertext []byte, key []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return fmt.Errorf("cipher creation error: %v", err)
+		return nil, err
 	}
 
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return fmt.Errorf("GCM creation error: %v", err)
+	if len(ciphertext) < aes.BlockSize {
+		return nil, errors.New("ciphertext too short")
 	}
 
-	nonceSize := gcm.NonceSize()
-	if len(ciphertext) < nonceSize {
-		return fmt.Errorf("ciphertext too short")
-	}
+	iv := ciphertext[:aes.BlockSize]
+	ciphertext = ciphertext[aes.BlockSize:]
 
-	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return fmt.Errorf("decryption error: %v", err)
-	}
+	stream := cipher.NewCFBDecrypter(block, iv)
+	stream.XORKeyStream(ciphertext, ciphertext)
 
-	if err := os.WriteFile(outputPath, plaintext, 0644); err != nil {
-		return fmt.Errorf("write file error: %v", err)
-	}
+	return ciphertext, nil
+}
 
-	return nil
+func generateRandomKey() ([]byte, error) {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return nil, err
+	}
+	return key, nil
 }
 
 func main() {
-	if len(os.Args) < 5 {
-		fmt.Println("Usage: go run file_encryption.go <encrypt|decrypt> <input> <output> <passphrase>")
-		fmt.Println("Example: go run file_encryption.go encrypt secret.txt secret.enc mypassword")
+	key, err := generateRandomKey()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to generate key: %v\n", err)
 		os.Exit(1)
 	}
 
-	operation := os.Args[1]
-	inputPath := os.Args[2]
-	outputPath := os.Args[3]
-	passphrase := os.Args[4]
+	originalText := "Sensitive data requiring protection"
+	fmt.Printf("Original: %s\n", originalText)
 
-	switch operation {
-	case "encrypt":
-		if err := encryptFile(inputPath, outputPath, passphrase); err != nil {
-			fmt.Printf("Encryption failed: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Printf("File encrypted successfully: %s -> %s\n", filepath.Base(inputPath), outputPath)
-	case "decrypt":
-		if err := decryptFile(inputPath, outputPath, passphrase); err != nil {
-			fmt.Printf("Decryption failed: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Printf("File decrypted successfully: %s -> %s\n", filepath.Base(inputPath), outputPath)
-	default:
-		fmt.Println("Invalid operation. Use 'encrypt' or 'decrypt'")
+	encrypted, err := encryptData([]byte(originalText), key)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Encryption failed: %v\n", err)
 		os.Exit(1)
 	}
+
+	fmt.Printf("Encrypted (base64): %s\n", base64.StdEncoding.EncodeToString(encrypted))
+
+	decrypted, err := decryptData(encrypted, key)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Decryption failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Decrypted: %s\n", string(decrypted))
 }
