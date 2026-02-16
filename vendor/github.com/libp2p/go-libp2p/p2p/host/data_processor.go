@@ -74,3 +74,113 @@ func main() {
 		fmt.Printf("Processed: %+v\n", record)
 	}
 }
+package main
+
+import (
+	"encoding/csv"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"strconv"
+)
+
+type Record struct {
+	Name  string  `json:"name"`
+	Age   int     `json:"age"`
+	Score float64 `json:"score"`
+	Valid bool    `json:"valid"`
+}
+
+func processCSVFile(inputPath string) ([]Record, error) {
+	file, err := os.Open(inputPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	reader.TrimLeadingSpace = true
+
+	var records []Record
+	headerSkipped := false
+
+	for {
+		row, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("csv read error: %w", err)
+		}
+
+		if !headerSkipped {
+			headerSkipped = true
+			continue
+		}
+
+		if len(row) < 4 {
+			continue
+		}
+
+		age, _ := strconv.Atoi(row[1])
+		score, _ := strconv.ParseFloat(row[2], 64)
+		valid, _ := strconv.ParseBool(row[3])
+
+		record := Record{
+			Name:  row[0],
+			Age:   age,
+			Score: score,
+			Valid: valid,
+		}
+		records = append(records, record)
+	}
+
+	return records, nil
+}
+
+func convertToJSON(records []Record) ([]byte, error) {
+	jsonData, err := json.MarshalIndent(records, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("json marshaling error: %w", err)
+	}
+	return jsonData, nil
+}
+
+func writeOutputFile(data []byte, outputPath string) error {
+	err := os.WriteFile(outputPath, data, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write output file: %w", err)
+	}
+	return nil
+}
+
+func main() {
+	if len(os.Args) < 3 {
+		fmt.Println("Usage: data_processor <input.csv> <output.json>")
+		os.Exit(1)
+	}
+
+	inputFile := os.Args[1]
+	outputFile := os.Args[2]
+
+	records, err := processCSVFile(inputFile)
+	if err != nil {
+		fmt.Printf("Error processing CSV: %v\n", err)
+		os.Exit(1)
+	}
+
+	jsonData, err := convertToJSON(records)
+	if err != nil {
+		fmt.Printf("Error converting to JSON: %v\n", err)
+		os.Exit(1)
+	}
+
+	err = writeOutputFile(jsonData, outputFile)
+	if err != nil {
+		fmt.Printf("Error writing output file: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Successfully processed %d records to %s\n", len(records), outputFile)
+}
