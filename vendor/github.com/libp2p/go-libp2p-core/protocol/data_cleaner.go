@@ -39,3 +39,39 @@ func RemoveDuplicatesSorted[T comparable](slice []T) []T {
 
 	return result
 }
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+func deduplicateStrings(slice []string) []string {
+	seen := make(map[string]struct{})
+	result := []string{}
+	for _, item := range slice {
+		if _, exists := seen[item]; !exists {
+			seen[item] = struct{}{}
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+func normalizeString(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
+func cleanData(input []string) []string {
+	normalized := make([]string, len(input))
+	for i, v := range input {
+		normalized[i] = normalizeString(v)
+	}
+	return deduplicateStrings(normalized)
+}
+
+func main() {
+	data := []string{"  Apple", "banana", "apple ", "Banana", "  Cherry  "}
+	cleaned := cleanData(data)
+	fmt.Println("Cleaned data:", cleaned)
+}
