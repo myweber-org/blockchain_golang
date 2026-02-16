@@ -1,52 +1,4 @@
-package auth
-
-import (
-    "errors"
-    "time"
-
-    "github.com/golang-jwt/jwt/v5"
-)
-
-type Claims struct {
-    UserID string `json:"user_id"`
-    Role   string `json:"role"`
-    jwt.RegisteredClaims
-}
-
-var jwtKey = []byte("your_secret_key_here")
-
-func GenerateToken(userID, role string) (string, error) {
-    expirationTime := time.Now().Add(24 * time.Hour)
-    claims := &Claims{
-        UserID: userID,
-        Role:   role,
-        RegisteredClaims: jwt.RegisteredClaims{
-            ExpiresAt: jwt.NewNumericDate(expirationTime),
-            IssuedAt:  jwt.NewNumericDate(time.Now()),
-            Issuer:    "myapp",
-        },
-    }
-
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-    return token.SignedString(jwtKey)
-}
-
-func ValidateToken(tokenString string) (*Claims, error) {
-    claims := &Claims{}
-    token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
-        return jwtKey, nil
-    })
-
-    if err != nil {
-        return nil, err
-    }
-
-    if !token.Valid {
-        return nil, errors.New("invalid token")
-    }
-
-    return claims, nil
-}package middleware
+package middleware
 
 import (
 	"context"
@@ -72,8 +24,8 @@ func Authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		token := parts[1]
-		userID, err := validateToken(token)
+		tokenString := parts[1]
+		userID, err := validateToken(tokenString)
 		if err != nil {
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
@@ -89,10 +41,14 @@ func GetUserID(ctx context.Context) (string, bool) {
 	return userID, ok
 }
 
-func validateToken(token string) (string, error) {
-	// Simplified token validation - in production use proper JWT library
-	if token == "valid-token-123" {
-		return "user-456", nil
+func validateToken(tokenString string) (string, error) {
+	// This is a placeholder for actual JWT validation logic
+	// In production, use a proper JWT library like github.com/golang-jwt/jwt
+	// For this example, we'll assume a simple mock validation
+	if tokenString == "" || len(tokenString) < 10 {
+		return "", http.ErrAbortHandler
 	}
-	return "", http.ErrNoCookie
+	// Mock: extract user ID from token (in real case, decode JWT claims)
+	userID := "user_" + tokenString[:8]
+	return userID, nil
 }
