@@ -84,3 +84,71 @@ func main() {
 
     fmt.Printf("Successfully cleaned data from %s to %s\n", inputFile, outputFile)
 }
+package main
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"strings"
+)
+
+type DataRecord struct {
+	ID      string
+	Content string
+	Hash    string
+}
+
+func generateHash(content string) string {
+	hash := sha256.Sum256([]byte(content))
+	return hex.EncodeToString(hash[:])
+}
+
+func deduplicateRecords(records []DataRecord) []DataRecord {
+	seen := make(map[string]bool)
+	var unique []DataRecord
+
+	for _, record := range records {
+		if !seen[record.Hash] {
+			seen[record.Hash] = true
+			unique = append(unique, record)
+		}
+	}
+	return unique
+}
+
+func validateRecord(record DataRecord) bool {
+	if strings.TrimSpace(record.ID) == "" {
+		return false
+	}
+	if strings.TrimSpace(record.Content) == "" {
+		return false
+	}
+	if record.Hash != generateHash(record.Content) {
+		return false
+	}
+	return true
+}
+
+func cleanDataPipeline(records []DataRecord) []DataRecord {
+	var validRecords []DataRecord
+	for _, record := range records {
+		if validateRecord(record) {
+			validRecords = append(validRecords, record)
+		}
+	}
+	return deduplicateRecords(validRecords)
+}
+
+func main() {
+	sampleData := []DataRecord{
+		{ID: "001", Content: "Sample data record", Hash: generateHash("Sample data record")},
+		{ID: "002", Content: "Duplicate record", Hash: generateHash("Duplicate record")},
+		{ID: "003", Content: "Sample data record", Hash: generateHash("Sample data record")},
+		{ID: "", Content: "Invalid record", Hash: generateHash("Invalid record")},
+	}
+
+	cleaned := cleanDataPipeline(sampleData)
+	fmt.Printf("Original: %d records\n", len(sampleData))
+	fmt.Printf("Cleaned: %d records\n", len(cleaned))
+}
