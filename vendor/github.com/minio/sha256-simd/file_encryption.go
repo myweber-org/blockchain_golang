@@ -2,126 +2,100 @@
 package main
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
-	"encoding/hex"
-	"fmt"
-	"io"
-	"os"
-	"path/filepath"
+    "crypto/aes"
+    "crypto/cipher"
+    "crypto/rand"
+    "crypto/sha256"
+    "encoding/base64"
+    "errors"
+    "fmt"
+    "io"
+    "strings"
 )
 
-func generateKey() ([]byte, error) {
-	key := make([]byte, 32)
-	if _, err := rand.Read(key); err != nil {
-		return nil, err
-	}
-	return key, nil
+type Encryptor struct {
+    key []byte
 }
 
-func encryptFile(inputPath, outputPath string, key []byte) error {
-	plaintext, err := os.ReadFile(inputPath)
-	if err != nil {
-		return err
-	}
-
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return err
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return err
-	}
-
-	nonce := make([]byte, gcm.NonceSize())
-	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return err
-	}
-
-	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
-
-	return os.WriteFile(outputPath, ciphertext, 0644)
+func NewEncryptor(passphrase string) *Encryptor {
+    hash := sha256.Sum256([]byte(passphrase))
+    return &Encryptor{key: hash[:]}
 }
 
-func decryptFile(inputPath, outputPath string, key []byte) error {
-	ciphertext, err := os.ReadFile(inputPath)
-	if err != nil {
-		return err
-	}
+func (e *Encryptor) Encrypt(plaintext string) (string, error) {
+    block, err := aes.NewCipher(e.key)
+    if err != nil {
+        return "", err
+    }
 
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return err
-	}
+    gcm, err := cipher.NewGCM(block)
+    if err != nil {
+        return "", err
+    }
 
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return err
-	}
+    nonce := make([]byte, gcm.NonceSize())
+    if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+        return "", err
+    }
 
-	nonceSize := gcm.NonceSize()
-	if len(ciphertext) < nonceSize {
-		return fmt.Errorf("ciphertext too short")
-	}
+    ciphertext := gcm.Seal(nonce, nonce, []byte(plaintext), nil)
+    return base64.URLEncoding.EncodeToString(ciphertext), nil
+}
 
-	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return err
-	}
+func (e *Encryptor) Decrypt(encrypted string) (string, error) {
+    data, err := base64.URLEncoding.DecodeString(encrypted)
+    if err != nil {
+        return "", err
+    }
 
-	return os.WriteFile(outputPath, plaintext, 0644)
+    block, err := aes.NewCipher(e.key)
+    if err != nil {
+        return "", err
+    }
+
+    gcm, err := cipher.NewGCM(block)
+    if err != nil {
+        return "", err
+    }
+
+    nonceSize := gcm.NonceSize()
+    if len(data) < nonceSize {
+        return "", errors.New("ciphertext too short")
+    }
+
+    nonce, ciphertext := data[:nonceSize], data[nonceSize:]
+    plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+    if err != nil {
+        return "", err
+    }
+
+    return string(plaintext), nil
 }
 
 func main() {
-	if len(os.Args) < 4 {
-		fmt.Println("Usage: go run file_encryption.go <encrypt|decrypt> <input> <output>")
-		fmt.Println("Example: go run file_encryption.go encrypt document.txt document.enc")
-		os.Exit(1)
-	}
-
-	action := os.Args[1]
-	inputPath := os.Args[2]
-	outputPath := os.Args[3]
-
-	key, err := generateKey()
-	if err != nil {
-		fmt.Printf("Key generation failed: %v\n", err)
-		os.Exit(1)
-	}
-
-	keyHex := hex.EncodeToString(key)
-	fmt.Printf("Generated key: %s\n", keyHex)
-	fmt.Printf("Save this key for decryption!\n")
-
-	switch action {
-	case "encrypt":
-		if err := encryptFile(inputPath, outputPath, key); err != nil {
-			fmt.Printf("Encryption failed: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Printf("File encrypted successfully: %s\n", filepath.Base(outputPath))
-	case "decrypt":
-		fmt.Print("Enter encryption key: ")
-		var keyInput string
-		fmt.Scanln(&keyInput)
-
-		decKey, err := hex.DecodeString(keyInput)
-		if err != nil {
-			fmt.Printf("Invalid key format: %v\n", err)
-			os.Exit(1)
-		}
-
-		if err := decryptFile(inputPath, outputPath, decKey); err != nil {
-			fmt.Printf("Decryption failed: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Printf("File decrypted successfully: %s\n", filepath.Base(outputPath))
-	default:
-		fmt.Println("Invalid action. Use 'encrypt' or 'decrypt'")
-		os.Exit(1)
-	}
+    encryptor := NewEncryptor("my-secret-passphrase")
+    
+    original := "Sensitive data that needs protection"
+    
+    encrypted, err := encryptor.Encrypt(original)
+    if err != nil {
+        fmt.Printf("Encryption error: %v\n", err)
+        return
+    }
+    
+    fmt.Printf("Encrypted: %s\n", encrypted)
+    
+    decrypted, err := encryptor.Decrypt(encrypted)
+    if err != nil {
+        fmt.Printf("Decryption error: %v\n", err)
+        return
+    }
+    
+    fmt.Printf("Decrypted: %s\n", decrypted)
+    
+    if strings.Compare(original, decrypted) == 0 {
+        fmt.Println("Encryption/decryption successful")
+    } else {
+        fmt.Println("Encryption/decryption failed")
+    }
 }
