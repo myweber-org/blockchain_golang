@@ -6,75 +6,39 @@ import (
 	"strings"
 )
 
-type DataRecord struct {
-	ID    int
-	Email string
-	Valid bool
+type DataCleaner struct {
+	seen map[string]bool
 }
 
-func deduplicateRecords(records []DataRecord) []DataRecord {
-	seen := make(map[string]bool)
-	var unique []DataRecord
-
-	for _, record := range records {
-		email := strings.ToLower(strings.TrimSpace(record.Email))
-		if !seen[email] {
-			seen[email] = true
-			record.Email = email
-			unique = append(unique, record)
-		}
+func NewDataCleaner() *DataCleaner {
+	return &DataCleaner{
+		seen: make(map[string]bool),
 	}
-	return unique
 }
 
-func validateEmails(records []DataRecord) []DataRecord {
-	for i := range records {
-		records[i].Valid = strings.Contains(records[i].Email, "@") &&
-			len(records[i].Email) > 3
+func (dc *DataCleaner) Clean(input string) string {
+	normalized := strings.ToLower(strings.TrimSpace(input))
+	if dc.seen[normalized] {
+		return ""
 	}
-	return records
+	dc.seen[normalized] = true
+	return normalized
 }
 
-func processData(records []DataRecord) []DataRecord {
-	records = deduplicateRecords(records)
-	records = validateEmails(records)
-	return records
-}
-
-func main() {
-	sampleData := []DataRecord{
-		{1, "user@example.com", false},
-		{2, "USER@example.com", false},
-		{3, "invalid-email", false},
-		{4, "test@domain.org", false},
-	}
-
-	processed := processData(sampleData)
-
-	for _, record := range processed {
-		fmt.Printf("ID: %d, Email: %s, Valid: %t\n",
-			record.ID, record.Email, record.Valid)
-	}
-}package main
-
-import "fmt"
-
-func removeDuplicates(input []int) []int {
-	seen := make(map[int]bool)
-	result := []int{}
-
-	for _, value := range input {
-		if !seen[value] {
-			seen[value] = true
-			result = append(result, value)
+func (dc *DataCleaner) ProcessBatch(items []string) []string {
+	var result []string
+	for _, item := range items {
+		cleaned := dc.Clean(item)
+		if cleaned != "" {
+			result = append(result, cleaned)
 		}
 	}
 	return result
 }
 
 func main() {
-	data := []int{5, 2, 8, 2, 5, 9, 8, 1}
-	cleaned := removeDuplicates(data)
-	fmt.Println("Original:", data)
-	fmt.Println("Cleaned:", cleaned)
+	cleaner := NewDataCleaner()
+	data := []string{"  Apple ", "apple", "BANANA", "banana ", "  Cherry  "}
+	cleaned := cleaner.ProcessBatch(data)
+	fmt.Println("Cleaned data:", cleaned)
 }
