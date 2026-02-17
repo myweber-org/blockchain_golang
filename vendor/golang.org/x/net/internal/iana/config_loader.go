@@ -310,4 +310,87 @@ func ValidateConfig(config *AppConfig) error {
         return fmt.Errorf("invalid server port: %d", config.Server.Port)
     }
     return nil
+}package config
+
+import (
+    "fmt"
+    "io/ioutil"
+    "os"
+
+    "gopkg.in/yaml.v2"
+)
+
+type DatabaseConfig struct {
+    Host     string `yaml:"host"`
+    Port     int    `yaml:"port"`
+    Username string `yaml:"username"`
+    Password string `yaml:"password"`
+    Name     string `yaml:"name"`
+}
+
+type ServerConfig struct {
+    Port int    `yaml:"port"`
+    Mode string `yaml:"mode"`
+}
+
+type AppConfig struct {
+    Database DatabaseConfig `yaml:"database"`
+    Server   ServerConfig   `yaml:"server"`
+    LogLevel string         `yaml:"log_level"`
+}
+
+func LoadConfig(configPath string) (*AppConfig, error) {
+    if configPath == "" {
+        return nil, fmt.Errorf("config path cannot be empty")
+    }
+
+    file, err := os.Open(configPath)
+    if err != nil {
+        return nil, fmt.Errorf("failed to open config file: %w", err)
+    }
+    defer file.Close()
+
+    data, err := ioutil.ReadAll(file)
+    if err != nil {
+        return nil, fmt.Errorf("failed to read config file: %w", err)
+    }
+
+    var config AppConfig
+    if err := yaml.Unmarshal(data, &config); err != nil {
+        return nil, fmt.Errorf("failed to parse YAML config: %w", err)
+    }
+
+    if config.Database.Host == "" {
+        config.Database.Host = "localhost"
+    }
+    if config.Database.Port == 0 {
+        config.Database.Port = 5432
+    }
+    if config.Server.Port == 0 {
+        config.Server.Port = 8080
+    }
+    if config.Server.Mode == "" {
+        config.Server.Mode = "development"
+    }
+    if config.LogLevel == "" {
+        config.LogLevel = "info"
+    }
+
+    return &config, nil
+}
+
+func (c *AppConfig) Validate() error {
+    if c.Database.Host == "" {
+        return fmt.Errorf("database host is required")
+    }
+    if c.Database.Port <= 0 || c.Database.Port > 65535 {
+        return fmt.Errorf("database port must be between 1 and 65535")
+    }
+    if c.Server.Port <= 0 || c.Server.Port > 65535 {
+        return fmt.Errorf("server port must be between 1 and 65535")
+    }
+    if c.Server.Mode != "development" && c.Server.Mode != "production" {
+        return fmt.Errorf("server mode must be either 'development' or 'production'")
+    }
+    return nil
 }
