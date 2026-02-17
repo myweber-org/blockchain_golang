@@ -102,4 +102,47 @@ func main() {
 	}
 
 	fmt.Println("Data processing completed successfully")
+}package main
+
+import (
+	"errors"
+	"strings"
+)
+
+type DataRecord struct {
+	ID    string
+	Value string
+	Tags  []string
+}
+
+func ValidateRecord(record DataRecord) error {
+	if record.ID == "" {
+		return errors.New("ID cannot be empty")
+	}
+	if len(record.Value) > 1000 {
+		return errors.New("value exceeds maximum length")
+	}
+	return nil
+}
+
+func TransformTags(tags []string) []string {
+	transformed := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		trimmed := strings.TrimSpace(tag)
+		if trimmed != "" {
+			transformed = append(transformed, strings.ToLower(trimmed))
+		}
+	}
+	return transformed
+}
+
+func ProcessRecord(record DataRecord) (DataRecord, error) {
+	if err := ValidateRecord(record); err != nil {
+		return DataRecord{}, err
+	}
+	return DataRecord{
+		ID:    record.ID,
+		Value: record.Value,
+		Tags:  TransformTags(record.Tags),
+	}, nil
 }
