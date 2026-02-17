@@ -144,3 +144,62 @@ func main() {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+)
+
+func rotateLog(logPath string, maxBackups int) error {
+	_, err := os.Stat(logPath)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to stat log file: %w", err)
+	}
+
+	timestamp := time.Now().Format("20060102_150405")
+	archivePath := fmt.Sprintf("%s.%s", logPath, timestamp)
+
+	err = os.Rename(logPath, archivePath)
+	if err != nil {
+		return fmt.Errorf("failed to rename log file: %w", err)
+	}
+
+	matches, err := filepath.Glob(logPath + ".*")
+	if err != nil {
+		return fmt.Errorf("failed to list backup files: %w", err)
+	}
+
+	if len(matches) > maxBackups {
+		oldestFiles := matches[:len(matches)-maxBackups]
+		for _, oldFile := range oldestFiles {
+			err = os.Remove(oldFile)
+			if err != nil {
+				return fmt.Errorf("failed to remove old backup %s: %w", oldFile, err)
+			}
+		}
+	}
+
+	newFile, err := os.Create(logPath)
+	if err != nil {
+		return fmt.Errorf("failed to create new log file: %w", err)
+	}
+	newFile.Close()
+
+	fmt.Printf("Log rotated: %s -> %s\n", logPath, archivePath)
+	return nil
+}
+
+func main() {
+	logFile := "application.log"
+	err := rotateLog(logFile, 5)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error rotating log: %v\n", err)
+		os.Exit(1)
+	}
+}
