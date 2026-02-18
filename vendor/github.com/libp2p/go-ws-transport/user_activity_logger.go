@@ -6,32 +6,31 @@ import (
 	"time"
 )
 
-type ActivityLog struct {
-	Timestamp  time.Time
-	Method     string
-	Path       string
-	RemoteAddr string
-	UserAgent  string
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
 }
 
 func ActivityLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		activity := ActivityLog{
-			Timestamp:  time.Now().UTC(),
-			Method:     r.Method,
-			Path:       r.URL.Path,
-			RemoteAddr: r.RemoteAddr,
-			UserAgent:  r.UserAgent(),
-		}
+		start := time.Now()
+		rw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 
-		log.Printf("Activity: %s %s from %s (UA: %s) at %s",
-			activity.Method,
-			activity.Path,
-			activity.RemoteAddr,
-			activity.UserAgent,
-			activity.Timestamp.Format(time.RFC3339),
+		next.ServeHTTP(rw, r)
+
+		duration := time.Since(start)
+		log.Printf(
+			"%s %s %d %s %s",
+			r.Method,
+			r.URL.Path,
+			rw.statusCode,
+			duration,
+			r.RemoteAddr,
 		)
-
-		next.ServeHTTP(w, r)
 	})
 }
