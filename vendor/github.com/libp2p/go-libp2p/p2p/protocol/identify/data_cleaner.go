@@ -121,4 +121,12 @@ func main() {
 	}
 
 	fmt.Printf("Processed %d valid records\n", len(records))
+}package utils
+
+func TrimWhitespaceFromSlice(slice []string) []string {
+    trimmed := make([]string, len(slice))
+    for i, s := range slice {
+        trimmed[i] = strings.TrimSpace(s)
+    }
+    return trimmed
 }
