@@ -190,4 +190,71 @@ func FilterByThreshold(records []DataRecord, threshold float64) []DataRecord {
         }
     }
     return filtered
+}package main
+
+import (
+	"fmt"
+	"strings"
+	"unicode"
+)
+
+type UserData struct {
+	Username string
+	Email    string
+	Age      int
+}
+
+func NormalizeUsername(username string) string {
+	return strings.TrimSpace(strings.ToLower(username))
+}
+
+func ValidateEmail(email string) bool {
+	if !strings.Contains(email, "@") || !strings.Contains(email, ".") {
+		return false
+	}
+	return len(email) > 5 && len(email) < 255
+}
+
+func ValidateAge(age int) bool {
+	return age >= 0 && age <= 120
+}
+
+func SanitizeInput(input string) string {
+	var result strings.Builder
+	for _, r := range input {
+		if unicode.IsPrint(r) && !unicode.IsControl(r) {
+			result.WriteRune(r)
+		}
+	}
+	return result.String()
+}
+
+func ProcessUserData(data UserData) (UserData, error) {
+	data.Username = SanitizeInput(NormalizeUsername(data.Username))
+	
+	if !ValidateEmail(data.Email) {
+		return data, fmt.Errorf("invalid email format")
+	}
+	
+	if !ValidateAge(data.Age) {
+		return data, fmt.Errorf("age out of valid range")
+	}
+	
+	return data, nil
+}
+
+func main() {
+	sampleData := UserData{
+		Username: "  JohnDoe123  ",
+		Email:    "john@example.com",
+		Age:      25,
+	}
+	
+	processed, err := ProcessUserData(sampleData)
+	if err != nil {
+		fmt.Printf("Processing error: %v\n", err)
+		return
+	}
+	
+	fmt.Printf("Processed data: %+v\n", processed)
 }
