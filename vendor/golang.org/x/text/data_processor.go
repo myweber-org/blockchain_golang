@@ -77,4 +77,24 @@ func ProcessData(inputs []string) []string {
 		}
 	}
 	return results
+}package main
+
+import (
+	"regexp"
+	"strings"
+)
+
+func CleanInput(input string) string {
+	cleaned := strings.TrimSpace(input)
+	cleaned = regexp.MustCompile(`\s+`).ReplaceAllString(cleaned, " ")
+	return cleaned
+}
+
+func NormalizeCase(input string) string {
+	return strings.ToLower(input)
+}
+
+func RemoveSpecialChars(input string) string {
+	reg := regexp.MustCompile(`[^a-zA-Z0-9\s]`)
+	return reg.ReplaceAllString(input, "")
 }
