@@ -225,4 +225,99 @@ func main() {
 		fmt.Println("Invalid operation. Use 'encrypt' or 'decrypt'.")
 		os.Exit(1)
 	}
+}package main
+
+import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+)
+
+func generateKey() ([]byte, error) {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return nil, err
+	}
+	return key, nil
+}
+
+func encrypt(plaintext []byte, key []byte) (string, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return "", err
+	}
+
+	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
+	return base64.StdEncoding.EncodeToString(ciphertext), nil
+}
+
+func decrypt(encodedCiphertext string, key []byte) ([]byte, error) {
+	ciphertext, err := base64.StdEncoding.DecodeString(encodedCiphertext)
+	if err != nil {
+		return nil, err
+	}
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, err
+	}
+
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(ciphertext) < gcm.NonceSize() {
+		return nil, errors.New("ciphertext too short")
+	}
+
+	nonce, ciphertext := ciphertext[:gcm.NonceSize()], ciphertext[gcm.NonceSize():]
+	return gcm.Open(nil, nonce, ciphertext, nil)
+}
+
+func main() {
+	key, err := generateKey()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Key generation failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	original := []byte("Sensitive data requiring protection")
+	fmt.Printf("Original: %s\n", original)
+
+	encrypted, err := encrypt(original, key)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Encryption failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Encrypted: %s\n", encrypted)
+
+	decrypted, err := decrypt(encrypted, key)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Decryption failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Decrypted: %s\n", decrypted)
+
+	if string(original) == string(decrypted) {
+		fmt.Println("Encryption/decryption successful")
+	} else {
+		fmt.Println("Encryption/decryption failed")
+		os.Exit(1)
+	}
 }
