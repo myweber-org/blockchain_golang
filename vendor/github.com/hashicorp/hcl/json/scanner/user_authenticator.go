@@ -162,4 +162,70 @@ func Authenticate(next http.HandlerFunc) http.HandlerFunc {
 
         next.ServeHTTP(w, r)
     }
+}package middleware
+
+import (
+	"net/http"
+	"strings"
+)
+
+type Authenticator struct {
+	secretKey []byte
+}
+
+func NewAuthenticator(secret string) *Authenticator {
+	return &Authenticator{secretKey: []byte(secret)}
+}
+
+func (a *Authenticator) ValidateToken(token string) bool {
+	if token == "" {
+		return false
+	}
+	
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	
+	return validateSignature(parts, a.secretKey)
+}
+
+func (a *Authenticator) Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "Authorization header required", http.StatusUnauthorized)
+			return
+		}
+		
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		if !a.ValidateToken(token) {
+			http.Error(w, "Invalid authentication token", http.StatusUnauthorized)
+			return
+		}
+		
+		next.ServeHTTP(w, r)
+	})
+}
+
+func validateSignature(parts []string, secret []byte) bool {
+	// Simplified signature validation for demonstration
+	// In production, use proper JWT library like github.com/golang-jwt/jwt
+	expectedSig := generateSignature(parts[0]+"."+parts[1], secret)
+	return parts[2] == expectedSig
+}
+
+func generateSignature(data string, secret []byte) string {
+	// Simplified signature generation
+	// This is for demonstration only
+	hash := simpleHash(data + string(secret))
+	return hash[:8]
+}
+
+func simpleHash(s string) string {
+	var hash uint32
+	for _, c := range s {
+		hash = hash*31 + uint32(c)
+	}
+	return fmt.Sprintf("%x", hash)
 }
