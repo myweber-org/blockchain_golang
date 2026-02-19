@@ -192,4 +192,138 @@ func (p *Processor) ExtractTokens(input string) []string {
 	cleaned := p.CleanInput(input)
 	normalized := p.NormalizeCase(cleaned)
 	return strings.Fields(normalized)
+}package main
+
+import (
+	"encoding/csv"
+	"fmt"
+	"io"
+	"os"
+	"strconv"
+	"strings"
+)
+
+type DataRecord struct {
+	ID      int
+	Name    string
+	Value   float64
+	Active  bool
+}
+
+func ParseCSVFile(filename string) ([]DataRecord, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	reader.TrimLeadingSpace = true
+
+	var records []DataRecord
+	lineNumber := 0
+
+	for {
+		lineNumber++
+		row, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("csv read error at line %d: %w", lineNumber, err)
+		}
+
+		if len(row) != 4 {
+			return nil, fmt.Errorf("invalid column count at line %d: expected 4, got %d", lineNumber, len(row))
+		}
+
+		record, err := parseRow(row, lineNumber)
+		if err != nil {
+			return nil, err
+		}
+
+		records = append(records, record)
+	}
+
+	return records, nil
+}
+
+func parseRow(row []string, lineNumber int) (DataRecord, error) {
+	var record DataRecord
+
+	id, err := strconv.Atoi(strings.TrimSpace(row[0]))
+	if err != nil {
+		return record, fmt.Errorf("invalid ID at line %d: %w", lineNumber, err)
+	}
+	record.ID = id
+
+	record.Name = strings.TrimSpace(row[1])
+
+	value, err := strconv.ParseFloat(strings.TrimSpace(row[2]), 64)
+	if err != nil {
+		return record, fmt.Errorf("invalid value at line %d: %w", lineNumber, err)
+	}
+	record.Value = value
+
+	active, err := strconv.ParseBool(strings.TrimSpace(row[3]))
+	if err != nil {
+		return record, fmt.Errorf("invalid active flag at line %d: %w", lineNumber, err)
+	}
+	record.Active = active
+
+	return record, nil
+}
+
+func ValidateRecords(records []DataRecord) []error {
+	var errors []error
+
+	for i, record := range records {
+		if record.ID <= 0 {
+			errors = append(errors, fmt.Errorf("record %d: ID must be positive", i+1))
+		}
+		if len(record.Name) == 0 {
+			errors = append(errors, fmt.Errorf("record %d: name cannot be empty", i+1))
+		}
+		if record.Value < 0 {
+			errors = append(errors, fmt.Errorf("record %d: value cannot be negative", i+1))
+		}
+	}
+
+	return errors
+}
+
+func ProcessData(filename string) error {
+	records, err := ParseCSVFile(filename)
+	if err != nil {
+		return fmt.Errorf("parsing failed: %w", err)
+	}
+
+	validationErrors := ValidateRecords(records)
+	if len(validationErrors) > 0 {
+		fmt.Println("Validation errors found:")
+		for _, err := range validationErrors {
+			fmt.Printf("  - %v\n", err)
+		}
+		return fmt.Errorf("data validation failed")
+	}
+
+	fmt.Printf("Successfully processed %d records\n", len(records))
+	for _, record := range records {
+		fmt.Printf("ID: %d, Name: %s, Value: %.2f, Active: %t\n",
+			record.ID, record.Name, record.Value, record.Active)
+	}
+
+	return nil
+}
+
+func main() {
+	if len(os.Args) != 2 {
+		fmt.Println("Usage: data_processor <csv_file>")
+		os.Exit(1)
+	}
+
+	if err := ProcessData(os.Args[1]); err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
 }
