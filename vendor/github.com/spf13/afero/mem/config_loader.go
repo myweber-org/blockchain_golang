@@ -164,4 +164,98 @@ func GetEnvConfig() (*ServerConfig, error) {
         configPath = "config.yaml"
     }
     return LoadConfig(configPath)
+}package config
+
+import (
+    "fmt"
+    "os"
+    "path/filepath"
+
+    "gopkg.in/yaml.v3"
+)
+
+type DatabaseConfig struct {
+    Host     string `yaml:"host" env:"DB_HOST"`
+    Port     int    `yaml:"port" env:"DB_PORT"`
+    Username string `yaml:"username" env:"DB_USER"`
+    Password string `yaml:"password" env:"DB_PASS"`
+    Name     string `yaml:"name" env:"DB_NAME"`
+}
+
+type ServerConfig struct {
+    Port         int    `yaml:"port" env:"SERVER_PORT"`
+    ReadTimeout  int    `yaml:"read_timeout" env:"READ_TIMEOUT"`
+    WriteTimeout int    `yaml:"write_timeout" env:"WRITE_TIMEOUT"`
+    DebugMode    bool   `yaml:"debug_mode" env:"DEBUG_MODE"`
+    LogLevel     string `yaml:"log_level" env:"LOG_LEVEL"`
+}
+
+type Config struct {
+    Database DatabaseConfig `yaml:"database"`
+    Server   ServerConfig   `yaml:"server"`
+    Version  string         `yaml:"version"`
+}
+
+func LoadConfig(configPath string) (*Config, error) {
+    data, err := os.ReadFile(configPath)
+    if err != nil {
+        return nil, fmt.Errorf("failed to read config file: %w", err)
+    }
+
+    var config Config
+    if err := yaml.Unmarshal(data, &config); err != nil {
+        return nil, fmt.Errorf("failed to parse YAML: %w", err)
+    }
+
+    overrideFromEnv(&config.Database)
+    overrideFromEnv(&config.Server)
+
+    return &config, nil
+}
+
+func overrideFromEnv(config interface{}) {
+    // Environment variable override logic would be implemented here
+    // This is a placeholder for the actual implementation
+}
+
+func ValidateConfigPath(path string) error {
+    absPath, err := filepath.Abs(path)
+    if err != nil {
+        return fmt.Errorf("invalid config path: %w", err)
+    }
+
+    info, err := os.Stat(absPath)
+    if os.IsNotExist(err) {
+        return fmt.Errorf("config file does not exist: %s", absPath)
+    }
+    if info.IsDir() {
+        return fmt.Errorf("config path is a directory: %s", absPath)
+    }
+
+    ext := filepath.Ext(absPath)
+    if ext != ".yaml" && ext != ".yml" {
+        return fmt.Errorf("config file must be YAML format: %s", absPath)
+    }
+
+    return nil
+}
+
+func DefaultConfig() *Config {
+    return &Config{
+        Database: DatabaseConfig{
+            Host:     "localhost",
+            Port:     5432,
+            Username: "postgres",
+            Password: "",
+            Name:     "appdb",
+        },
+        Server: ServerConfig{
+            Port:         8080,
+            ReadTimeout:  30,
+            WriteTimeout: 30,
+            DebugMode:    false,
+            LogLevel:     "info",
+        },
+        Version: "1.0.0",
+    }
 }
