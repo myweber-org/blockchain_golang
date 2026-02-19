@@ -106,4 +106,129 @@ func main() {
 			fmt.Printf("Error: %v\n", err)
 		}
 	}
+}package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"sync"
+	"time"
+)
+
+type DataRecord struct {
+	ID        int       `json:"id"`
+	Value     string    `json:"value"`
+	Timestamp time.Time `json:"timestamp"`
+	Processed bool      `json:"processed"`
+}
+
+type Processor struct {
+	mu       sync.RWMutex
+	records  []DataRecord
+	errors   []error
+	wg       sync.WaitGroup
+}
+
+func NewProcessor() *Processor {
+	return &Processor{
+		records: make([]DataRecord, 0),
+		errors:  make([]error, 0),
+	}
+}
+
+func (p *Processor) AddRecord(record DataRecord) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	record.Timestamp = time.Now()
+	p.records = append(p.records, record)
+}
+
+func (p *Processor) ProcessRecord(index int) {
+	defer p.wg.Done()
+
+	p.mu.RLock()
+	if index >= len(p.records) {
+		p.mu.RUnlock()
+		return
+	}
+	record := p.records[index]
+	p.mu.RUnlock()
+
+	time.Sleep(10 * time.Millisecond)
+
+	p.mu.Lock()
+	p.records[index].Processed = true
+	p.mu.Unlock()
+}
+
+func (p *Processor) ProcessAll() {
+	p.wg.Add(len(p.records))
+	for i := range p.records {
+		go p.ProcessRecord(i)
+	}
+	p.wg.Wait()
+}
+
+func (p *Processor) LogError(err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.errors = append(p.errors, err)
+	log.Printf("Error recorded: %v", err)
+}
+
+func (p *Processor) ExportToFile(filename string) error {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	file, err := os.Create(filename)
+	if err != nil {
+		p.LogError(err)
+		return err
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	if err := encoder.Encode(p.records); err != nil {
+		p.LogError(err)
+		return err
+	}
+	return nil
+}
+
+func (p *Processor) Stats() (int, int) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	processed := 0
+	for _, record := range p.records {
+		if record.Processed {
+			processed++
+		}
+	}
+	return len(p.records), processed
+}
+
+func main() {
+	processor := NewProcessor()
+
+	for i := 1; i <= 100; i++ {
+		record := DataRecord{
+			ID:    i,
+			Value: fmt.Sprintf("data-%d", i),
+		}
+		processor.AddRecord(record)
+	}
+
+	processor.ProcessAll()
+
+	total, processed := processor.Stats()
+	fmt.Printf("Processed %d out of %d records\n", processed, total)
+
+	if err := processor.ExportToFile("output.json"); err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Data exported to output.json")
 }
