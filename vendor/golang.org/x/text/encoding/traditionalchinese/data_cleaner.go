@@ -8,59 +8,61 @@ import (
 
 type DataRecord struct {
 	ID    int
+	Name  string
 	Email string
 	Valid bool
 }
 
-func deduplicateRecords(records []DataRecord) []DataRecord {
+func RemoveDuplicates(records []DataRecord) []DataRecord {
 	seen := make(map[string]bool)
 	var unique []DataRecord
 
 	for _, record := range records {
-		email := strings.ToLower(strings.TrimSpace(record.Email))
-		if !seen[email] {
-			seen[email] = true
+		key := fmt.Sprintf("%s|%s", record.Name, record.Email)
+		if !seen[key] {
+			seen[key] = true
 			unique = append(unique, record)
 		}
 	}
 	return unique
 }
 
-func validateEmail(email string) bool {
-	if len(email) < 3 || !strings.Contains(email, "@") {
-		return false
+func ValidateRecords(records []DataRecord) []DataRecord {
+	var validated []DataRecord
+	for _, record := range records {
+		record.Valid = strings.Contains(record.Email, "@") && len(record.Name) > 0
+		validated = append(validated, record)
 	}
-	parts := strings.Split(email, "@")
-	if len(parts) != 2 || len(parts[0]) == 0 || len(parts[1]) == 0 {
-		return false
-	}
-	return true
+	return validated
 }
 
-func cleanData(records []DataRecord) []DataRecord {
-	var cleaned []DataRecord
+func PrintRecords(records []DataRecord) {
 	for _, record := range records {
-		if validateEmail(record.Email) {
-			record.Valid = true
-			cleaned = append(cleaned, record)
+		status := "INVALID"
+		if record.Valid {
+			status = "VALID"
 		}
+		fmt.Printf("ID: %d, Name: %s, Email: %s, Status: %s\n",
+			record.ID, record.Name, record.Email, status)
 	}
-	return deduplicateRecords(cleaned)
 }
 
 func main() {
-	sampleData := []DataRecord{
-		{1, "user@example.com", false},
-		{2, "invalid-email", false},
-		{3, "user@example.com", false},
-		{4, "another@domain.org", false},
-		{5, "noatsign", false},
+	records := []DataRecord{
+		{1, "John Doe", "john@example.com", false},
+		{2, "Jane Smith", "jane@example.com", false},
+		{3, "John Doe", "john@example.com", false},
+		{4, "Bob", "invalid-email", false},
 	}
 
-	cleaned := cleanData(sampleData)
-	fmt.Printf("Original: %d records\n", len(sampleData))
-	fmt.Printf("Cleaned: %d records\n", len(cleaned))
-	for _, r := range cleaned {
-		fmt.Printf("ID: %d, Email: %s, Valid: %v\n", r.ID, r.Email, r.Valid)
-	}
+	fmt.Println("Original records:")
+	PrintRecords(records)
+
+	uniqueRecords := RemoveDuplicates(records)
+	fmt.Println("\nAfter deduplication:")
+	PrintRecords(uniqueRecords)
+
+	validatedRecords := ValidateRecords(uniqueRecords)
+	fmt.Println("\nAfter validation:")
+	PrintRecords(validatedRecords)
 }
