@@ -1,45 +1,49 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
 	"regexp"
 	"strings"
 )
 
+type UserData struct {
+	Username string
+	Email    string
+	Comments string
+}
+
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+
+func SanitizeInput(input string) string {
+	input = strings.TrimSpace(input)
+	re := regexp.MustCompile(`[<>"'&]`)
+	return re.ReplaceAllString(input, "")
+}
+
 func ValidateEmail(email string) bool {
-	re := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
-	return re.MatchString(email)
+	return emailRegex.MatchString(email)
 }
 
-func TransformToTitleCase(input string) string {
-	if input == "" {
-		return input
+func ProcessUserData(data UserData) (UserData, error) {
+	data.Username = SanitizeInput(data.Username)
+	data.Email = SanitizeInput(data.Email)
+	data.Comments = SanitizeInput(data.Comments)
+
+	if !ValidateEmail(data.Email) {
+		return data, &ValidationError{Field: "email", Message: "invalid email format"}
 	}
-	return strings.ToUpper(input[:1]) + strings.ToLower(input[1:])
+
+	if len(data.Username) < 3 || len(data.Username) > 50 {
+		return data, &ValidationError{Field: "username", Message: "username must be between 3 and 50 characters"}
+	}
+
+	return data, nil
 }
 
-func PrettyPrintJSON(data interface{}) (string, error) {
-	bytes, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return "", err
-	}
-	return string(bytes), nil
+type ValidationError struct {
+	Field   string
+	Message string
 }
 
-func main() {
-	email := "test@example.com"
-	fmt.Printf("Email %s valid: %v\n", email, ValidateEmail(email))
-
-	name := "john doe"
-	fmt.Printf("Title case of '%s': %s\n", name, TransformToTitleCase(name))
-
-	sample := map[string]interface{}{
-		"name":  "Alice",
-		"age":   30,
-		"email": "alice@example.com",
-	}
-	pretty, _ := PrettyPrintJSON(sample)
-	fmt.Println("Pretty JSON:")
-	fmt.Println(pretty)
+func (e *ValidationError) Error() string {
+	return e.Field + ": " + e.Message
 }
