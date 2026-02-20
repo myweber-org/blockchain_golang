@@ -4,7 +4,6 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strings"
 )
@@ -31,46 +30,35 @@ func cleanCSV(inputPath, outputPath string) error {
 		return fmt.Errorf("failed to read headers: %w", err)
 	}
 
-	cleanedHeaders := make([]string, len(headers))
+	trimmedHeaders := make([]string, len(headers))
 	for i, h := range headers {
-		cleanedHeaders[i] = strings.TrimSpace(strings.ToLower(h))
+		trimmedHeaders[i] = strings.TrimSpace(h)
 	}
-
-	if err := writer.Write(cleanedHeaders); err != nil {
+	if err := writer.Write(trimmedHeaders); err != nil {
 		return fmt.Errorf("failed to write headers: %w", err)
 	}
 
-	recordCount := 0
 	for {
 		record, err := reader.Read()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			log.Printf("skipping invalid record: %v", err)
-			continue
+			return fmt.Errorf("failed to read record: %w", err)
 		}
 
 		cleanedRecord := make([]string, len(record))
-		valid := true
 		for i, field := range record {
 			cleaned := strings.TrimSpace(field)
-			if cleaned == "" {
-				valid = false
-				break
-			}
+			cleaned = strings.ToLower(cleaned)
 			cleanedRecord[i] = cleaned
 		}
 
-		if valid {
-			if err := writer.Write(cleanedRecord); err != nil {
-				return fmt.Errorf("failed to write record: %w", err)
-			}
-			recordCount++
+		if err := writer.Write(cleanedRecord); err != nil {
+			return fmt.Errorf("failed to write record: %w", err)
 		}
 	}
 
-	fmt.Printf("Cleaned %d records from %s to %s\n", recordCount, inputPath, outputPath)
 	return nil
 }
 
@@ -84,69 +72,9 @@ func main() {
 	outputFile := os.Args[2]
 
 	if err := cleanCSV(inputFile, outputFile); err != nil {
-		log.Fatal(err)
-	}
-}
-package main
-
-import (
-	"fmt"
-	"strings"
-)
-
-type DataRecord struct {
-	ID    int
-	Email string
-	Valid bool
-}
-
-func deduplicateRecords(records []DataRecord) []DataRecord {
-	seen := make(map[string]bool)
-	var unique []DataRecord
-	for _, record := range records {
-		email := strings.ToLower(strings.TrimSpace(record.Email))
-		if !seen[email] {
-			seen[email] = true
-			unique = append(unique, record)
-		}
-	}
-	return unique
-}
-
-func validateEmail(email string) bool {
-	if len(email) < 3 || !strings.Contains(email, "@") {
-		return false
-	}
-	parts := strings.Split(email, "@")
-	if len(parts) != 2 || len(parts[0]) == 0 || len(parts[1]) == 0 {
-		return false
-	}
-	return true
-}
-
-func cleanData(records []DataRecord) []DataRecord {
-	var cleaned []DataRecord
-	for _, record := range records {
-		if validateEmail(record.Email) {
-			record.Valid = true
-			cleaned = append(cleaned, record)
-		}
-	}
-	return deduplicateRecords(cleaned)
-}
-
-func main() {
-	sampleData := []DataRecord{
-		{1, "user@example.com", false},
-		{2, "invalid-email", false},
-		{3, "user@example.com", false},
-		{4, "another@test.org", false},
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
 	}
 
-	cleaned := cleanData(sampleData)
-	fmt.Printf("Original: %d records\n", len(sampleData))
-	fmt.Printf("Cleaned: %d records\n", len(cleaned))
-	for _, record := range cleaned {
-		fmt.Printf("ID: %d, Email: %s, Valid: %v\n", record.ID, record.Email, record.Valid)
-	}
+	fmt.Printf("Successfully cleaned data. Output saved to %s\n", outputFile)
 }
