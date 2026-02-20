@@ -1,117 +1,66 @@
 package config
 
 import (
-	"io/ioutil"
-	"log"
+    "fmt"
+    "io/ioutil"
+    "os"
 
-	"gopkg.in/yaml.v2"
+    "gopkg.in/yaml.v2"
 )
 
-type Config struct {
-	Server struct {
-		Host string `yaml:"host"`
-		Port int    `yaml:"port"`
-	} `yaml:"server"`
-	Database struct {
-		Host     string `yaml:"host"`
-		Username string `yaml:"username"`
-		Password string `yaml:"password"`
-		Name     string `yaml:"name"`
-	} `yaml:"database"`
-	LogLevel string `yaml:"log_level"`
+type DatabaseConfig struct {
+    Host     string `yaml:"host"`
+    Port     int    `yaml:"port"`
+    Username string `yaml:"username"`
+    Password string `yaml:"password"`
+    Name     string `yaml:"name"`
 }
 
-func LoadConfig(filename string) (*Config, error) {
-	data, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-
-	var config Config
-	err = yaml.Unmarshal(data, &config)
-	if err != nil {
-		return nil, err
-	}
-
-	return &config, nil
+type ServerConfig struct {
+    Port         int            `yaml:"port"`
+    ReadTimeout  int            `yaml:"read_timeout"`
+    WriteTimeout int            `yaml:"write_timeout"`
+    Database     DatabaseConfig `yaml:"database"`
 }
 
-func LoadConfigWithDefaults(filename string) *Config {
-	config, err := LoadConfig(filename)
-	if err != nil {
-		log.Printf("Failed to load config: %v, using defaults", err)
-		return DefaultConfig()
-	}
-	return config
+func LoadConfig(path string) (*ServerConfig, error) {
+    if _, err := os.Stat(path); os.IsNotExist(err) {
+        return nil, fmt.Errorf("config file not found: %s", path)
+    }
+
+    data, err := ioutil.ReadFile(path)
+    if err != nil {
+        return nil, fmt.Errorf("failed to read config file: %w", err)
+    }
+
+    var config ServerConfig
+    if err := yaml.Unmarshal(data, &config); err != nil {
+        return nil, fmt.Errorf("failed to parse YAML: %w", err)
+    }
+
+    if err := validateConfig(&config); err != nil {
+        return nil, fmt.Errorf("config validation failed: %w", err)
+    }
+
+    return &config, nil
 }
 
-func DefaultConfig() *Config {
-	var config Config
-	config.Server.Host = "localhost"
-	config.Server.Port = 8080
-	config.Database.Host = "localhost"
-	config.Database.Name = "appdb"
-	config.LogLevel = "info"
-	return &config
-}package config
+func validateConfig(config *ServerConfig) error {
+    if config.Port <= 0 || config.Port > 65535 {
+        return fmt.Errorf("invalid server port: %d", config.Port)
+    }
 
-import (
-	"io/ioutil"
-	"log"
+    if config.Database.Host == "" {
+        return fmt.Errorf("database host cannot be empty")
+    }
 
-	"gopkg.in/yaml.v2"
-)
+    if config.Database.Port <= 0 || config.Database.Port > 65535 {
+        return fmt.Errorf("invalid database port: %d", config.Database.Port)
+    }
 
-type AppConfig struct {
-	Server struct {
-		Port    int    `yaml:"port"`
-		Host    string `yaml:"host"`
-		Timeout int    `yaml:"timeout"`
-	} `yaml:"server"`
-	Database struct {
-		Host     string `yaml:"host"`
-		Port     int    `yaml:"port"`
-		Username string `yaml:"username"`
-		Password string `yaml:"password"`
-		Name     string `yaml:"name"`
-	} `yaml:"database"`
-	Logging struct {
-		Level  string `yaml:"level"`
-		Output string `yaml:"output"`
-	} `yaml:"logging"`
-}
+    if config.Database.Name == "" {
+        return fmt.Errorf("database name cannot be empty")
+    }
 
-func LoadConfig(filePath string) (*AppConfig, error) {
-	data, err := ioutil.ReadFile(filePath)
-	if err != nil {
-		return nil, err
-	}
-
-	var config AppConfig
-	err = yaml.Unmarshal(data, &config)
-	if err != nil {
-		return nil, err
-	}
-
-	return &config, nil
-}
-
-func ValidateConfig(config *AppConfig) bool {
-	if config.Server.Port <= 0 || config.Server.Port > 65535 {
-		log.Printf("Invalid server port: %d", config.Server.Port)
-		return false
-	}
-
-	if config.Database.Host == "" {
-		log.Print("Database host cannot be empty")
-		return false
-	}
-
-	if config.Logging.Level != "debug" && config.Logging.Level != "info" &&
-		config.Logging.Level != "warn" && config.Logging.Level != "error" {
-		log.Printf("Invalid logging level: %s", config.Logging.Level)
-		return false
-	}
-
-	return true
+    return nil
 }
