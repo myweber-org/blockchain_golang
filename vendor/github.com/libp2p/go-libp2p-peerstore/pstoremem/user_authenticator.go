@@ -1,84 +1,28 @@
-package middleware
+package main
 
 import (
-	"context"
-	"net/http"
-	"strings"
-
-	"github.com/golang-jwt/jwt/v5"
-)
-
-type contextKey string
-
-const userIDKey contextKey = "userID"
-
-type Claims struct {
-	UserID string `json:"user_id"`
-	jwt.RegisteredClaims
-}
-
-func AuthMiddleware(secretKey string) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
-				http.Error(w, "Authorization header required", http.StatusUnauthorized)
-				return
-			}
-
-			parts := strings.Split(authHeader, " ")
-			if len(parts) != 2 || parts[0] != "Bearer" {
-				http.Error(w, "Invalid authorization format", http.StatusUnauthorized)
-				return
-			}
-
-			tokenStr := parts[1]
-			claims := &Claims{}
-
-			token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
-				return []byte(secretKey), nil
-			})
-
-			if err != nil || !token.Valid {
-				http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
-				return
-			}
-
-			ctx := context.WithValue(r.Context(), userIDKey, claims.UserID)
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	}
-}
-
-func GetUserID(ctx context.Context) (string, bool) {
-	userID, ok := ctx.Value(userIDKey).(string)
-	return userID, ok
-}package auth
-
-import (
-    "errors"
+    "fmt"
     "time"
-
-    "github.com/golang-jwt/jwt/v4"
+    "github.com/golang-jwt/jwt/v5"
 )
 
 type Claims struct {
-    UserID string `json:"user_id"`
-    Role   string `json:"role"`
+    Username string `json:"username"`
+    UserID   int    `json:"user_id"`
     jwt.RegisteredClaims
 }
 
 var jwtKey = []byte("your_secret_key_here")
 
-func GenerateToken(userID, role string) (string, error) {
+func GenerateToken(username string, userID int) (string, error) {
     expirationTime := time.Now().Add(24 * time.Hour)
     claims := &Claims{
-        UserID: userID,
-        Role:   role,
+        Username: username,
+        UserID:   userID,
         RegisteredClaims: jwt.RegisteredClaims{
             ExpiresAt: jwt.NewNumericDate(expirationTime),
             IssuedAt:  jwt.NewNumericDate(time.Now()),
-            Issuer:    "myapp",
+            Issuer:    "auth_service",
         },
     }
 
@@ -97,59 +41,26 @@ func ValidateToken(tokenString string) (*Claims, error) {
     }
 
     if !token.Valid {
-        return nil, errors.New("invalid token")
+        return nil, fmt.Errorf("invalid token")
     }
 
     return claims, nil
-}package middleware
-
-import (
-	"context"
-	"net/http"
-	"strings"
-)
-
-type contextKey string
-
-const userIDKey contextKey = "userID"
-
-func Authenticate(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			http.Error(w, "Authorization header required", http.StatusUnauthorized)
-			return
-		}
-
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			http.Error(w, "Invalid authorization format", http.StatusUnauthorized)
-			return
-		}
-
-		token := parts[1]
-		userID, err := validateToken(token)
-		if err != nil {
-			http.Error(w, "Invalid token", http.StatusUnauthorized)
-			return
-		}
-
-		ctx := context.WithValue(r.Context(), userIDKey, userID)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
 }
 
-func GetUserID(ctx context.Context) (string, bool) {
-	userID, ok := ctx.Value(userIDKey).(string)
-	return userID, ok
-}
+func main() {
+    token, err := GenerateToken("john_doe", 123)
+    if err != nil {
+        fmt.Printf("Error generating token: %v\n", err)
+        return
+    }
 
-func validateToken(token string) (string, error) {
-	// This is a placeholder for actual JWT validation logic
-	// In production, use a proper JWT library like github.com/golang-jwt/jwt
-	if token == "" {
-		return "", http.ErrNoCookie
-	}
-	// Simulate token validation - in reality this would decode and verify the JWT
-	return "user-" + token[:8], nil
+    fmt.Printf("Generated token: %s\n", token)
+
+    claims, err := ValidateToken(token)
+    if err != nil {
+        fmt.Printf("Error validating token: %v\n", err)
+        return
+    }
+
+    fmt.Printf("Valid token for user: %s (ID: %d)\n", claims.Username, claims.UserID)
 }
