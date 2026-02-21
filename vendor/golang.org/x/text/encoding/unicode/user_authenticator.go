@@ -10,7 +10,7 @@ type contextKey string
 
 const userIDKey contextKey = "userID"
 
-func AuthMiddleware(next http.Handler) http.Handler {
+func Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
@@ -42,10 +42,11 @@ func GetUserID(ctx context.Context) (string, bool) {
 }
 
 func validateToken(tokenString string) (string, error) {
-	// This is a placeholder for actual JWT validation logic
-	// In production, use a proper JWT library like github.com/golang-jwt/jwt
+	// Placeholder for actual JWT validation logic
+	// In production, use a library like github.com/golang-jwt/jwt
+	// This example returns a mock user ID for demonstration
 	if tokenString == "valid_token_example" {
-		return "user123", nil
+		return "user_12345", nil
 	}
 	return "", http.ErrNoCookie
 }
