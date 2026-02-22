@@ -128,3 +128,56 @@ func WriteProcessedData(outputPath string, records []DataRecord) error {
 
 	return nil
 }
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+type UserData struct {
+	Username string
+	Email    string
+	Age      int
+}
+
+func NormalizeUsername(username string) string {
+	return strings.TrimSpace(strings.ToLower(username))
+}
+
+func ValidateEmail(email string) bool {
+	return strings.Contains(email, "@") && strings.Contains(email, ".")
+}
+
+func ProcessUserData(data UserData) (UserData, error) {
+	if data.Username == "" {
+		return data, fmt.Errorf("username cannot be empty")
+	}
+	data.Username = NormalizeUsername(data.Username)
+
+	if !ValidateEmail(data.Email) {
+		return data, fmt.Errorf("invalid email format")
+	}
+
+	if data.Age < 0 || data.Age > 150 {
+		return data, fmt.Errorf("age must be between 0 and 150")
+	}
+
+	return data, nil
+}
+
+func main() {
+	testData := UserData{
+		Username: "  JohnDoe  ",
+		Email:    "john@example.com",
+		Age:      25,
+	}
+
+	processed, err := ProcessUserData(testData)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Processed data: %+v\n", processed)
+}
