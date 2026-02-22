@@ -129,3 +129,67 @@ func main() {
 	fmt.Println("Original:", data)
 	fmt.Println("Cleaned and deduplicated:", unique)
 }
+package main
+
+import (
+	"encoding/csv"
+	"fmt"
+	"os"
+	"strings"
+)
+
+func main() {
+	if len(os.Args) < 2 {
+		fmt.Println("Usage: data_cleaner <input_file.csv>")
+		os.Exit(1)
+	}
+
+	inputFile := os.Args[1]
+	outputFile := strings.TrimSuffix(inputFile, ".csv") + "_cleaned.csv"
+
+	file, err := os.Open(inputFile)
+	if err != nil {
+		fmt.Printf("Error opening file: %v\n", err)
+		os.Exit(1)
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	records, err := reader.ReadAll()
+	if err != nil {
+		fmt.Printf("Error reading CSV: %v\n", err)
+		os.Exit(1)
+	}
+
+	uniqueRecords := make(map[string][]string)
+	var cleaned [][]string
+
+	for _, record := range records {
+		if len(record) == 0 {
+			continue
+		}
+		key := strings.Join(record, "|")
+		if _, exists := uniqueRecords[key]; !exists {
+			uniqueRecords[key] = record
+			cleaned = append(cleaned, record)
+		}
+	}
+
+	outFile, err := os.Create(outputFile)
+	if err != nil {
+		fmt.Printf("Error creating output file: %v\n", err)
+		os.Exit(1)
+	}
+	defer outFile.Close()
+
+	writer := csv.NewWriter(outFile)
+	err = writer.WriteAll(cleaned)
+	if err != nil {
+		fmt.Printf("Error writing CSV: %v\n", err)
+		os.Exit(1)
+	}
+
+	writer.Flush()
+	fmt.Printf("Cleaned data saved to: %s\n", outputFile)
+	fmt.Printf("Removed %d duplicate rows\n", len(records)-len(cleaned))
+}
