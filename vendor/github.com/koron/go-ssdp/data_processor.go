@@ -327,3 +327,51 @@ func main() {
 		os.Exit(1)
 	}
 }
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "strings"
+)
+
+// DataPayload represents a generic structure for incoming data
+type DataPayload struct {
+    ID    string `json:"id"`
+    Value int    `json:"value"`
+    Tags  []string `json:"tags"`
+}
+
+// ValidateJSON checks if the provided string is valid JSON and matches the DataPayload structure.
+// Returns the parsed payload and an error if validation fails.
+func ValidateJSON(input string) (*DataPayload, error) {
+    if strings.TrimSpace(input) == "" {
+        return nil, fmt.Errorf("input string is empty")
+    }
+
+    var payload DataPayload
+    err := json.Unmarshal([]byte(input), &payload)
+    if err != nil {
+        return nil, fmt.Errorf("failed to parse JSON: %w", err)
+    }
+
+    if payload.ID == "" {
+        return nil, fmt.Errorf("field 'id' is required and cannot be empty")
+    }
+    if payload.Value < 0 {
+        return nil, fmt.Errorf("field 'value' must be a non-negative integer")
+    }
+
+    return &payload, nil
+}
+
+func main() {
+    // Example usage
+    testInput := `{"id": "test-123", "value": 42, "tags": ["go", "json", "util"]}`
+    result, err := ValidateJSON(testInput)
+    if err != nil {
+        fmt.Printf("Validation error: %v\n", err)
+        return
+    }
+    fmt.Printf("Parsed payload: %+v\n", result)
+}
