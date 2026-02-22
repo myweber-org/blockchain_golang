@@ -1,77 +1,64 @@
-
 package main
 
 import (
-	"encoding/json"
+	"errors"
 	"fmt"
-	"regexp"
 	"strings"
-	"time"
+	"unicode"
 )
 
-type DataRecord struct {
-	ID        string    `json:"id"`
-	Email     string    `json:"email"`
-	Timestamp time.Time `json:"timestamp"`
-	Value     float64   `json:"value"`
-	Tags      []string  `json:"tags"`
+type UserData struct {
+	Username string
+	Email    string
+	Age      int
 }
 
-func ValidateEmail(email string) bool {
-	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
-	return emailRegex.MatchString(email)
-}
+func ValidateAndNormalize(data *UserData) error {
+	if data == nil {
+		return errors.New("user data cannot be nil")
+	}
 
-func TransformTags(tags []string) []string {
-	transformed := make([]string, 0, len(tags))
-	for _, tag := range tags {
-		cleanTag := strings.TrimSpace(tag)
-		if cleanTag != "" {
-			transformed = append(transformed, strings.ToLower(cleanTag))
+	data.Username = strings.TrimSpace(data.Username)
+	if len(data.Username) < 3 || len(data.Username) > 20 {
+		return errors.New("username must be between 3 and 20 characters")
+	}
+	for _, r := range data.Username {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '-' {
+			return errors.New("username can only contain letters, digits, underscores, and hyphens")
 		}
 	}
-	return transformed
-}
 
-func ProcessRecord(record DataRecord) (DataRecord, error) {
-	if !ValidateEmail(record.Email) {
-		return DataRecord{}, fmt.Errorf("invalid email format: %s", record.Email)
+	data.Email = strings.ToLower(strings.TrimSpace(data.Email))
+	if !strings.Contains(data.Email, "@") || !strings.Contains(data.Email, ".") {
+		return errors.New("invalid email format")
 	}
 
-	if record.Value < 0 {
-		record.Value = 0
+	if data.Age < 0 || data.Age > 150 {
+		return errors.New("age must be between 0 and 150")
 	}
 
-	record.Tags = TransformTags(record.Tags)
-	record.Timestamp = time.Now().UTC()
-
-	return record, nil
+	return nil
 }
 
-func SerializeRecord(record DataRecord) ([]byte, error) {
-	return json.MarshalIndent(record, "", "  ")
+func ProcessUserInput(username, email string, age int) (*UserData, error) {
+	user := &UserData{
+		Username: username,
+		Email:    email,
+		Age:      age,
+	}
+
+	if err := ValidateAndNormalize(user); err != nil {
+		return nil, fmt.Errorf("validation failed: %w", err)
+	}
+
+	return user, nil
 }
 
 func main() {
-	sampleRecord := DataRecord{
-		ID:        "user-123",
-		Email:     "test@example.com",
-		Timestamp: time.Now(),
-		Value:     42.5,
-		Tags:      []string{"  Go  ", "BACKEND", "", "Data  "},
-	}
-
-	processed, err := ProcessRecord(sampleRecord)
+	user, err := ProcessUserInput("  John_Doe-123  ", "JOHN@EXAMPLE.COM", 25)
 	if err != nil {
-		fmt.Printf("Processing error: %v\n", err)
+		fmt.Printf("Error: %v\n", err)
 		return
 	}
-
-	jsonData, err := SerializeRecord(processed)
-	if err != nil {
-		fmt.Printf("Serialization error: %v\n", err)
-		return
-	}
-
-	fmt.Printf("Processed record:\n%s\n", string(jsonData))
+	fmt.Printf("Processed user: %+v\n", user)
 }
