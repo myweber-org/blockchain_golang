@@ -1,88 +1,109 @@
 package session
 
 import (
-	"sync"
-	"time"
+    "crypto/rand"
+    "encoding/base64"
+    "errors"
+    "time"
+
+    "github.com/go-redis/redis/v8"
+    "golang.org/x/net/context"
+)
+
+var (
+    ErrInvalidToken = errors.New("invalid session token")
+    ErrSessionExpired = errors.New("session expired")
 )
 
 type Session struct {
-	ID        string
-	UserID    int
-	Data      map[string]interface{}
-	ExpiresAt time.Time
+    UserID    string
+    Username  string
+    CreatedAt time.Time
+    ExpiresAt time.Time
 }
 
-type SessionManager struct {
-	sessions map[string]*Session
-	mu       sync.RWMutex
-	ttl      time.Duration
+type Manager struct {
+    client     *redis.Client
+    prefix     string
+    expiration time.Duration
 }
 
-func NewSessionManager(ttl time.Duration) *SessionManager {
-	sm := &SessionManager{
-		sessions: make(map[string]*Session),
-		ttl:      ttl,
-	}
-	go sm.cleanupWorker()
-	return sm
+func NewManager(client *redis.Client, prefix string, expiration time.Duration) *Manager {
+    return &Manager{
+        client:     client,
+        prefix:     prefix,
+        expiration: expiration,
+    }
 }
 
-func (sm *SessionManager) Create(userID int) *Session {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
-	session := &Session{
-		ID:        generateSessionID(),
-		UserID:    userID,
-		Data:      make(map[string]interface{}),
-		ExpiresAt: time.Now().Add(sm.ttl),
-	}
-	sm.sessions[session.ID] = session
-	return session
+func generateToken() (string, error) {
+    bytes := make([]byte, 32)
+    if _, err := rand.Read(bytes); err != nil {
+        return "", err
+    }
+    return base64.URLEncoding.EncodeToString(bytes), nil
 }
 
-func (sm *SessionManager) Get(sessionID string) *Session {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
+func (m *Manager) Create(userID, username string) (string, error) {
+    token, err := generateToken()
+    if err != nil {
+        return "", err
+    }
 
-	session, exists := sm.sessions[sessionID]
-	if !exists || time.Now().After(session.ExpiresAt) {
-		return nil
-	}
-	return session
+    session := Session{
+        UserID:    userID,
+        Username:  username,
+        CreatedAt: time.Now(),
+        ExpiresAt: time.Now().Add(m.expiration),
+    }
+
+    key := m.prefix + token
+    ctx := context.Background()
+    
+    err = m.client.Set(ctx, key, session, m.expiration).Err()
+    if err != nil {
+        return "", err
+    }
+
+    return token, nil
 }
 
-func (sm *SessionManager) Delete(sessionID string) {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	delete(sm.sessions, sessionID)
+func (m *Manager) Get(token string) (*Session, error) {
+    key := m.prefix + token
+    ctx := context.Background()
+
+    var session Session
+    err := m.client.Get(ctx, key).Scan(&session)
+    if err != nil {
+        if err == redis.Nil {
+            return nil, ErrInvalidToken
+        }
+        return nil, err
+    }
+
+    if time.Now().After(session.ExpiresAt) {
+        m.Delete(token)
+        return nil, ErrSessionExpired
+    }
+
+    return &session, nil
 }
 
-func (sm *SessionManager) cleanupWorker() {
-	ticker := time.NewTicker(time.Minute)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		sm.mu.Lock()
-		now := time.Now()
-		for id, session := range sm.sessions {
-			if now.After(session.ExpiresAt) {
-				delete(sm.sessions, id)
-			}
-		}
-		sm.mu.Unlock()
-	}
+func (m *Manager) Delete(token string) error {
+    key := m.prefix + token
+    ctx := context.Background()
+    return m.client.Del(ctx, key).Err()
 }
 
-func generateSessionID() string {
-	return "sess_" + time.Now().Format("20060102150405") + "_" + randomString(16)
-}
+func (m *Manager) Refresh(token string) error {
+    session, err := m.Get(token)
+    if err != nil {
+        return err
+    }
 
-func randomString(n int) string {
-	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = letters[time.Now().UnixNano()%int64(len(letters))]
-	}
-	return string(b)
+    session.ExpiresAt = time.Now().Add(m.expiration)
+    key := m.prefix + token
+    ctx := context.Background()
+
+    return m.client.Set(ctx, key, session, m.expiration).Err()
 }
