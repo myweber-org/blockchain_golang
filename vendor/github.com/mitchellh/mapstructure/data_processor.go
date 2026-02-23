@@ -48,3 +48,34 @@ func ProcessRecords(records []DataRecord, multiplier float64) ([]DataRecord, err
 	}
 	return processed, nil
 }
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+func ProcessUserData(input string) (string, error) {
+	if strings.TrimSpace(input) == "" {
+		return "", fmt.Errorf("input cannot be empty")
+	}
+
+	processed := strings.ToLower(input)
+	processed = strings.ReplaceAll(processed, "badword", "***")
+	processed = strings.TrimSpace(processed)
+
+	if len(processed) > 100 {
+		processed = processed[:100] + "..."
+	}
+
+	return processed, nil
+}
+
+func main() {
+	result, err := ProcessUserData("  Example input with Badword to process  ")
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+	fmt.Println("Processed:", result)
+}
