@@ -143,4 +143,109 @@ func main() {
 	if err := processor.ExportProcessedList(os.Stdout); err != nil {
 		fmt.Printf("Failed to export list: %v\n", err)
 	}
+}package main
+
+import (
+    "bufio"
+    "fmt"
+    "os"
+    "path/filepath"
+    "sync"
+)
+
+type FileStats struct {
+    Path     string
+    Size     int64
+    Lines    int
+    Error    error
+}
+
+func processFile(path string, wg *sync.WaitGroup, results chan<- FileStats) {
+    defer wg.Done()
+
+    stats := FileStats{Path: path}
+    file, err := os.Open(path)
+    if err != nil {
+        stats.Error = err
+        results <- stats
+        return
+    }
+    defer file.Close()
+
+    info, err := file.Stat()
+    if err != nil {
+        stats.Error = err
+        results <- stats
+        return
+    }
+    stats.Size = info.Size()
+
+    scanner := bufio.NewScanner(file)
+    lineCount := 0
+    for scanner.Scan() {
+        lineCount++
+    }
+    stats.Lines = lineCount
+
+    if err := scanner.Err(); err != nil {
+        stats.Error = err
+    }
+
+    results <- stats
+}
+
+func main() {
+    if len(os.Args) < 2 {
+        fmt.Println("Usage: file_processor <directory>")
+        os.Exit(1)
+    }
+
+    root := os.Args[1]
+    var files []string
+
+    err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+        if err != nil {
+            return err
+        }
+        if !info.IsDir() {
+            files = append(files, path)
+        }
+        return nil
+    })
+
+    if err != nil {
+        fmt.Printf("Error walking directory: %v\n", err)
+        os.Exit(1)
+    }
+
+    var wg sync.WaitGroup
+    results := make(chan FileStats, len(files))
+
+    for _, file := range files {
+        wg.Add(1)
+        go processFile(file, &wg, results)
+    }
+
+    wg.Wait()
+    close(results)
+
+    totalFiles := 0
+    totalSize := int64(0)
+    totalLines := 0
+
+    for stats := range results {
+        if stats.Error != nil {
+            fmt.Printf("Error processing %s: %v\n", stats.Path, stats.Error)
+            continue
+        }
+        totalFiles++
+        totalSize += stats.Size
+        totalLines += stats.Lines
+        fmt.Printf("Processed: %s (Size: %d bytes, Lines: %d)\n", stats.Path, stats.Size, stats.Lines)
+    }
+
+    fmt.Printf("\nSummary:\n")
+    fmt.Printf("Total files processed: %d\n", totalFiles)
+    fmt.Printf("Total size: %d bytes\n", totalSize)
+    fmt.Printf("Total lines: %d\n", totalLines)
 }
