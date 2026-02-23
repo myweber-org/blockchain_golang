@@ -39,3 +39,22 @@ func main() {
 	}
 	fmt.Printf("Parsed user: %+v\n", user)
 }
+package data
+
+func FilterAndTransform(numbers []int, predicate func(int) bool, transform func(int) int) []int {
+    var result []int
+    for _, num := range numbers {
+        if predicate(num) {
+            result = append(result, transform(num))
+        }
+    }
+    return result
+}
+
+func IsEven(n int) bool {
+    return n%2 == 0
+}
+
+func Square(n int) int {
+    return n * n
+}
