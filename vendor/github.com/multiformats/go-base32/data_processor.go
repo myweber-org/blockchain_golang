@@ -129,3 +129,50 @@ func main() {
 		os.Exit(1)
 	}
 }
+package main
+
+import (
+	"errors"
+	"regexp"
+	"strings"
+)
+
+type DataRecord struct {
+	ID    string
+	Email string
+	Value float64
+}
+
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+
+func ValidateRecord(record DataRecord) error {
+	if record.ID == "" {
+		return errors.New("ID cannot be empty")
+	}
+	if !emailRegex.MatchString(record.Email) {
+		return errors.New("invalid email format")
+	}
+	if record.Value < 0 {
+		return errors.New("value must be non-negative")
+	}
+	return nil
+}
+
+func TransformRecord(record DataRecord) DataRecord {
+	return DataRecord{
+		ID:    strings.ToUpper(record.ID),
+		Email: strings.ToLower(record.Email),
+		Value: record.Value * 1.1,
+	}
+}
+
+func ProcessRecords(records []DataRecord) ([]DataRecord, error) {
+	var processed []DataRecord
+	for _, record := range records {
+		if err := ValidateRecord(record); err != nil {
+			return nil, err
+		}
+		processed = append(processed, TransformRecord(record))
+	}
+	return processed, nil
+}
