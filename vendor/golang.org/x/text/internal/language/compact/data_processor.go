@@ -1,25 +1,99 @@
+
 package main
 
 import (
-	"regexp"
+	"encoding/csv"
+	"fmt"
+	"io"
+	"os"
 	"strings"
 )
 
-func SanitizeUsername(input string) string {
-	re := regexp.MustCompile(`[^a-zA-Z0-9_-]`)
-	sanitized := re.ReplaceAllString(input, "")
-	return strings.TrimSpace(sanitized)
+type DataRecord struct {
+	ID      string
+	Name    string
+	Value   string
+	IsValid bool
 }
 
-func ValidateEmail(email string) bool {
-	pattern := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
-	matched, _ := regexp.MatchString(pattern, email)
-	return matched
-}
-
-func TruncateString(input string, maxLength int) string {
-	if len(input) <= maxLength {
-		return input
+func ProcessCSVFile(filePath string) ([]DataRecord, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
-	return input[:maxLength]
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	reader.TrimLeadingSpace = true
+
+	var records []DataRecord
+	lineNumber := 0
+
+	for {
+		lineNumber++
+		row, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("csv read error at line %d: %w", lineNumber, err)
+		}
+
+		if len(row) < 3 {
+			continue
+		}
+
+		record := DataRecord{
+			ID:    strings.TrimSpace(row[0]),
+			Name:  strings.TrimSpace(row[1]),
+			Value: strings.TrimSpace(row[2]),
+		}
+		record.IsValid = validateRecord(record)
+
+		records = append(records, record)
+	}
+
+	return records, nil
+}
+
+func validateRecord(record DataRecord) bool {
+	if record.ID == "" || record.Name == "" {
+		return false
+	}
+	if len(record.Value) > 100 {
+		return false
+	}
+	return true
+}
+
+func FilterValidRecords(records []DataRecord) []DataRecord {
+	var valid []DataRecord
+	for _, record := range records {
+		if record.IsValid {
+			valid = append(valid, record)
+		}
+	}
+	return valid
+}
+
+func main() {
+	if len(os.Args) < 2 {
+		fmt.Println("Usage: data_processor <csv_file>")
+		return
+	}
+
+	records, err := ProcessCSVFile(os.Args[1])
+	if err != nil {
+		fmt.Printf("Error processing file: %v\n", err)
+		return
+	}
+
+	validRecords := FilterValidRecords(records)
+	fmt.Printf("Total records: %d, Valid records: %d\n", len(records), len(validRecords))
+
+	for i, record := range validRecords {
+		if i < 5 {
+			fmt.Printf("Valid record: ID=%s, Name=%s\n", record.ID, record.Name)
+		}
+	}
 }
