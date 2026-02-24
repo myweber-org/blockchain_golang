@@ -1,59 +1,75 @@
 package config
 
 import (
-    "os"
-    "strconv"
-    "strings"
+	"os"
+	"path/filepath"
+
+	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
-    DatabaseURL  string
-    MaxConnections int
-    DebugMode    bool
-    AllowedHosts []string
+	Server struct {
+		Host string `yaml:"host" env:"SERVER_HOST"`
+		Port int    `yaml:"port" env:"SERVER_PORT"`
+	} `yaml:"server"`
+	Database struct {
+		Host     string `yaml:"host" env:"DB_HOST"`
+		Port     int    `yaml:"port" env:"DB_PORT"`
+		Name     string `yaml:"name" env:"DB_NAME"`
+		User     string `yaml:"user" env:"DB_USER"`
+		Password string `yaml:"password" env:"DB_PASSWORD"`
+		SSLMode  string `yaml:"ssl_mode" env:"DB_SSL_MODE"`
+	} `yaml:"database"`
+	Logging struct {
+		Level  string `yaml:"level" env:"LOG_LEVEL"`
+		Format string `yaml:"format" env:"LOG_FORMAT"`
+	} `yaml:"logging"`
 }
 
-func LoadConfig() (*Config, error) {
-    cfg := &Config{
-        DatabaseURL:  getEnv("DB_URL", "postgres://localhost:5432/app"),
-        MaxConnections: getEnvAsInt("MAX_CONNECTIONS", 10),
-        DebugMode:    getEnvAsBool("DEBUG_MODE", false),
-        AllowedHosts: getEnvAsSlice("ALLOWED_HOSTS", []string{"localhost", "127.0.0.1"}),
-    }
-    return cfg, nil
+func LoadConfig(configPath string) (*Config, error) {
+	absPath, err := filepath.Abs(configPath)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+
+	overrideFromEnv(&cfg)
+	return &cfg, nil
 }
 
-func getEnv(key, defaultValue string) string {
-    if value, exists := os.LookupEnv(key); exists {
-        return value
-    }
-    return defaultValue
+func overrideFromEnv(cfg *Config) {
+	overrideString(&cfg.Server.Host, "SERVER_HOST")
+	overrideInt(&cfg.Server.Port, "SERVER_PORT")
+	overrideString(&cfg.Database.Host, "DB_HOST")
+	overrideInt(&cfg.Database.Port, "DB_PORT")
+	overrideString(&cfg.Database.Name, "DB_NAME")
+	overrideString(&cfg.Database.User, "DB_USER")
+	overrideString(&cfg.Database.Password, "DB_PASSWORD")
+	overrideString(&cfg.Database.SSLMode, "DB_SSL_MODE")
+	overrideString(&cfg.Logging.Level, "LOG_LEVEL")
+	overrideString(&cfg.Logging.Format, "LOG_FORMAT")
 }
 
-func getEnvAsInt(key string, defaultValue int) int {
-    strValue := getEnv(key, "")
-    if strValue == "" {
-        return defaultValue
-    }
-    if value, err := strconv.Atoi(strValue); err == nil {
-        return value
-    }
-    return defaultValue
+func overrideString(field *string, envVar string) {
+	if val := os.Getenv(envVar); val != "" {
+		*field = val
+	}
 }
 
-func getEnvAsBool(key string, defaultValue bool) bool {
-    strValue := getEnv(key, "")
-    if strValue == "" {
-        return defaultValue
-    }
-    strValue = strings.ToLower(strValue)
-    return strValue == "true" || strValue == "1" || strValue == "yes"
-}
-
-func getEnvAsSlice(key string, defaultValue []string) []string {
-    strValue := getEnv(key, "")
-    if strValue == "" {
-        return defaultValue
-    }
-    return strings.Split(strValue, ",")
+func overrideInt(field *int, envVar string) {
+	if val := os.Getenv(envVar); val != "" {
+		var intVal int
+		if _, err := fmt.Sscanf(val, "%d", &intVal); err == nil {
+			*field = intVal
+		}
+	}
 }
