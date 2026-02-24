@@ -81,3 +81,94 @@ func TruncateString(s string, maxLen int) string {
 	}
 	return s[:maxLen]
 }
+package main
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+)
+
+type DataRecord struct {
+	ID        string
+	Value     float64
+	Timestamp time.Time
+	Tags      []string
+}
+
+func ValidateRecord(record DataRecord) error {
+	if record.ID == "" {
+		return errors.New("record ID cannot be empty")
+	}
+	if record.Value < 0 {
+		return errors.New("record value cannot be negative")
+	}
+	if record.Timestamp.IsZero() {
+		return errors.New("record timestamp must be set")
+	}
+	return nil
+}
+
+func TransformRecord(record DataRecord, multiplier float64) (DataRecord, error) {
+	if err := ValidateRecord(record); err != nil {
+		return DataRecord{}, err
+	}
+
+	transformed := DataRecord{
+		ID:        strings.ToUpper(record.ID),
+		Value:     record.Value * multiplier,
+		Timestamp: record.Timestamp.UTC(),
+		Tags:      append([]string{}, record.Tags...),
+	}
+
+	if len(transformed.Tags) == 0 {
+		transformed.Tags = []string{"default"}
+	}
+
+	return transformed, nil
+}
+
+func ProcessBatch(records []DataRecord, multiplier float64) ([]DataRecord, error) {
+	var results []DataRecord
+	var errors []string
+
+	for i, record := range records {
+		transformed, err := TransformRecord(record, multiplier)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("record %d: %v", i, err))
+			continue
+		}
+		results = append(results, transformed)
+	}
+
+	if len(errors) > 0 {
+		return results, fmt.Errorf("processing errors: %s", strings.Join(errors, "; "))
+	}
+
+	return results, nil
+}
+
+func CalculateStatistics(records []DataRecord) (float64, float64, error) {
+	if len(records) == 0 {
+		return 0, 0, errors.New("no records provided")
+	}
+
+	var sum float64
+	var count int
+
+	for _, record := range records {
+		if err := ValidateRecord(record); err != nil {
+			continue
+		}
+		sum += record.Value
+		count++
+	}
+
+	if count == 0 {
+		return 0, 0, errors.New("no valid records found")
+	}
+
+	average := sum / float64(count)
+	return sum, average, nil
+}
