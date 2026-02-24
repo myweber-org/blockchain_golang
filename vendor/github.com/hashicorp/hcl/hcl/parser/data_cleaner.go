@@ -1,35 +1,54 @@
-package utils
+
+package main
 
 import (
-	"regexp"
+	"fmt"
 	"strings"
-	"unicode"
 )
 
-func SanitizeString(input string) string {
-	// Remove extra whitespace
-	re := regexp.MustCompile(`\s+`)
-	cleaned := re.ReplaceAllString(input, " ")
-	
-	// Trim spaces from beginning and end
-	cleaned = strings.TrimSpace(cleaned)
-	
-	// Remove non-printable characters
-	cleaned = strings.Map(func(r rune) rune {
-		if unicode.IsPrint(r) {
-			return r
-		}
-		return -1
-	}, cleaned)
-	
-	// Convert to lowercase for consistency
-	cleaned = strings.ToLower(cleaned)
-	
-	return cleaned
+type DataCleaner struct {
+	seen map[string]bool
 }
 
-func NormalizeWhitespace(input string) string {
-	// Replace all whitespace variations with single space
-	re := regexp.MustCompile(`[\s\p{Zs}]+`)
-	return re.ReplaceAllString(input, " ")
+func NewDataCleaner() *DataCleaner {
+	return &DataCleaner{
+		seen: make(map[string]bool),
+	}
+}
+
+func (dc *DataCleaner) Normalize(input string) string {
+	return strings.ToLower(strings.TrimSpace(input))
+}
+
+func (dc *DataCleaner) IsDuplicate(value string) bool {
+	normalized := dc.Normalize(value)
+	if dc.seen[normalized] {
+		return true
+	}
+	dc.seen[normalized] = true
+	return false
+}
+
+func (dc *DataCleaner) Deduplicate(values []string) []string {
+	dc.seen = make(map[string]bool)
+	var result []string
+	for _, v := range values {
+		if !dc.IsDuplicate(v) {
+			result = append(result, v)
+		}
+	}
+	return result
+}
+
+func main() {
+	cleaner := NewDataCleaner()
+	
+	data := []string{"Apple", "apple", " BANANA ", "banana", "Cherry"}
+	fmt.Println("Original:", data)
+	
+	deduped := cleaner.Deduplicate(data)
+	fmt.Println("Deduplicated:", deduped)
+	
+	testValue := "  APPLE  "
+	fmt.Printf("Is '%s' duplicate? %v\n", testValue, cleaner.IsDuplicate(testValue))
 }
