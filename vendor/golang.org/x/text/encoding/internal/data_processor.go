@@ -329,3 +329,53 @@ func main() {
 	validRecords := ValidateRecords(records)
 	GenerateReport(validRecords)
 }
+package data_processor
+
+import (
+	"regexp"
+	"strings"
+)
+
+type UserData struct {
+	Email    string
+	Username string
+	Age      int
+}
+
+func ValidateEmail(email string) bool {
+	pattern := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
+	matched, _ := regexp.MatchString(pattern, email)
+	return matched
+}
+
+func SanitizeUsername(username string) string {
+	username = strings.TrimSpace(username)
+	username = strings.ToLower(username)
+	return username
+}
+
+func TransformUserData(data UserData) (UserData, error) {
+	if !ValidateEmail(data.Email) {
+		return UserData{}, &InvalidDataError{Field: "email"}
+	}
+
+	transformed := UserData{
+		Email:    strings.ToLower(data.Email),
+		Username: SanitizeUsername(data.Username),
+		Age:      data.Age,
+	}
+
+	if transformed.Age < 0 {
+		transformed.Age = 0
+	}
+
+	return transformed, nil
+}
+
+type InvalidDataError struct {
+	Field string
+}
+
+func (e *InvalidDataError) Error() string {
+	return "invalid data in field: " + e.Field
+}
