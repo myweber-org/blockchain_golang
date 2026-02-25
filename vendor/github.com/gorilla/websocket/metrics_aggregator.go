@@ -94,4 +94,119 @@ func main() {
 	for code, count := range metrics.GetStatusCodeDistribution() {
 		fmt.Printf("  %d: %d\n", code, count)
 	}
+}package metrics
+
+import (
+	"sort"
+	"sync"
+	"time"
+)
+
+type Aggregator struct {
+	windowSize   time.Duration
+	maxSamples   int
+	measurements []measurement
+	mu           sync.RWMutex
+}
+
+type measurement struct {
+	timestamp time.Time
+	value     float64
+}
+
+type Summary struct {
+	Count    int
+	Mean     float64
+	Median   float64
+	P95      float64
+	P99      float64
+	Min      float64
+	Max      float64
+}
+
+func NewAggregator(windowSize time.Duration, maxSamples int) *Aggregator {
+	return &Aggregator{
+		windowSize: windowSize,
+		maxSamples: maxSamples,
+		measurements: make([]measurement, 0, maxSamples),
+	}
+}
+
+func (a *Aggregator) Record(value float64) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	now := time.Now()
+	a.measurements = append(a.measurements, measurement{
+		timestamp: now,
+		value:     value,
+	})
+
+	a.prune(now)
+	if len(a.measurements) > a.maxSamples {
+		a.measurements = a.measurements[1:]
+	}
+}
+
+func (a *Aggregator) prune(now time.Time) {
+	cutoff := now.Add(-a.windowSize)
+	i := 0
+	for i < len(a.measurements) && a.measurements[i].timestamp.Before(cutoff) {
+		i++
+	}
+	if i > 0 {
+		a.measurements = a.measurements[i:]
+	}
+}
+
+func (a *Aggregator) GetSummary() Summary {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	if len(a.measurements) == 0 {
+		return Summary{}
+	}
+
+	values := make([]float64, len(a.measurements))
+	var sum float64
+	min := a.measurements[0].value
+	max := a.measurements[0].value
+
+	for i, m := range a.measurements {
+		values[i] = m.value
+		sum += m.value
+		if m.value < min {
+			min = m.value
+		}
+		if m.value > max {
+			max = m.value
+		}
+	}
+
+	sort.Float64s(values)
+
+	return Summary{
+		Count:  len(values),
+		Mean:   sum / float64(len(values)),
+		Median: percentile(values, 0.5),
+		P95:    percentile(values, 0.95),
+		P99:    percentile(values, 0.99),
+		Min:    min,
+		Max:    max,
+	}
+}
+
+func percentile(sorted []float64, p float64) float64 {
+	if len(sorted) == 0 {
+		return 0
+	}
+	index := p * float64(len(sorted)-1)
+	lower := int(index)
+	upper := lower + 1
+	weight := index - float64(lower)
+
+	if upper >= len(sorted) {
+		return sorted[lower]
+	}
+	return sorted[lower]*(1-weight) + sorted[upper]*weight
 }
