@@ -98,3 +98,49 @@ func RemoveSpecialChars(input string) string {
 	reg := regexp.MustCompile(`[^a-zA-Z0-9\s]`)
 	return reg.ReplaceAllString(input, "")
 }
+package data_processor
+
+import (
+	"regexp"
+	"strings"
+)
+
+type DataCleaner struct {
+	whitespaceRegex *regexp.Regexp
+	emailRegex      *regexp.Regexp
+}
+
+func NewDataCleaner() *DataCleaner {
+	return &DataCleaner{
+		whitespaceRegex: regexp.MustCompile(`\s+`),
+		emailRegex:      regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`),
+	}
+}
+
+func (dc *DataCleaner) NormalizeWhitespace(input string) string {
+	trimmed := strings.TrimSpace(input)
+	return dc.whitespaceRegex.ReplaceAllString(trimmed, " ")
+}
+
+func (dc *DataCleaner) ValidateEmail(email string) bool {
+	return dc.emailRegex.MatchString(email)
+}
+
+func (dc *DataCleaner) ExtractDomain(email string) (string, bool) {
+	if !dc.ValidateEmail(email) {
+		return "", false
+	}
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		return "", false
+	}
+	return parts[1], true
+}
+
+func (dc *DataCleaner) SanitizeInput(input string, maxLength int) string {
+	normalized := dc.NormalizeWhitespace(input)
+	if len(normalized) > maxLength {
+		return normalized[:maxLength]
+	}
+	return normalized
+}
