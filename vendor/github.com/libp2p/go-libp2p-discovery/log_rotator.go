@@ -178,3 +178,113 @@ func main() {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+package main
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+)
+
+type RotatingLogger struct {
+	mu           sync.Mutex
+	currentSize  int64
+	maxFileSize  int64
+	basePath     string
+	currentFile  *os.File
+	fileCounter  int
+}
+
+func NewRotatingLogger(basePath string, maxSize int64) (*RotatingLogger, error) {
+	rl := &RotatingLogger{
+		basePath:    basePath,
+		maxFileSize: maxSize,
+	}
+	if err := rl.openCurrentFile(); err != nil {
+		return nil, err
+	}
+	return rl, nil
+}
+
+func (rl *RotatingLogger) openCurrentFile() error {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	if rl.currentFile != nil {
+		rl.currentFile.Close()
+	}
+
+	filename := fmt.Sprintf("%s.%d.log", rl.basePath, rl.fileCounter)
+	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+
+	info, err := file.Stat()
+	if err != nil {
+		file.Close()
+		return err
+	}
+
+	rl.currentFile = file
+	rl.currentSize = info.Size()
+	return nil
+}
+
+func (rl *RotatingLogger) rotateIfNeeded() error {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	if rl.currentSize < rl.maxFileSize {
+		return nil
+	}
+
+	rl.fileCounter++
+	return rl.openCurrentFile()
+}
+
+func (rl *RotatingLogger) Write(p []byte) (int, error) {
+	if err := rl.rotateIfNeeded(); err != nil {
+		return 0, err
+	}
+
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	n, err := rl.currentFile.Write(p)
+	if err == nil {
+		rl.currentSize += int64(n)
+	}
+	return n, err
+}
+
+func (rl *RotatingLogger) Close() error {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	if rl.currentFile != nil {
+		return rl.currentFile.Close()
+	}
+	return nil
+}
+
+func main() {
+	logger, err := NewRotatingLogger("app", 1024*1024)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create logger: %v\n", err)
+		os.Exit(1)
+	}
+	defer logger.Close()
+
+	for i := 0; i < 100; i++ {
+		msg := fmt.Sprintf("[%s] Log entry %d: Application is running normally\n", 
+			time.Now().Format(time.RFC3339), i)
+		if _, err := logger.Write([]byte(msg)); err != nil {
+			fmt.Fprintf(os.Stderr, "Write failed: %v\n", err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
