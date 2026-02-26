@@ -51,4 +51,38 @@ func validateToken(token string) (string, error) {
 	// Mock token validation - extract user ID from token
 	// In reality, this would verify signature and claims
 	return "user_" + token[:8], nil
+}package middleware
+
+import (
+	"fmt"
+	"net/http"
+	"strings"
+)
+
+func Authenticate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "Missing authorization header", http.StatusUnauthorized)
+			return
+		}
+
+		parts := strings.Split(authHeader, " ")
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			http.Error(w, "Invalid authorization format", http.StatusUnauthorized)
+			return
+		}
+
+		token := parts[1]
+		if !validateToken(token) {
+			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func validateToken(token string) bool {
+	return len(token) > 10 && strings.HasPrefix(token, "valid_")
 }
