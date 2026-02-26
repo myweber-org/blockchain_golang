@@ -140,3 +140,89 @@ func main() {
 
 	fmt.Printf("Data cleaned successfully. Output saved to %s\n", outputFile)
 }
+package main
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+)
+
+type DataRecord struct {
+	ID    int
+	Name  string
+	Email string
+	Age   int
+}
+
+func ValidateRecord(record DataRecord) error {
+	if record.ID <= 0 {
+		return errors.New("invalid ID")
+	}
+	if strings.TrimSpace(record.Name) == "" {
+		return errors.New("name cannot be empty")
+	}
+	if !strings.Contains(record.Email, "@") {
+		return errors.New("invalid email format")
+	}
+	if record.Age < 0 || record.Age > 150 {
+		return errors.New("age out of valid range")
+	}
+	return nil
+}
+
+func RemoveDuplicates(records []DataRecord) []DataRecord {
+	seen := make(map[int]bool)
+	var unique []DataRecord
+
+	for _, record := range records {
+		if !seen[record.ID] {
+			seen[record.ID] = true
+			unique = append(unique, record)
+		}
+	}
+	return unique
+}
+
+func CleanData(records []DataRecord) ([]DataRecord, error) {
+	var cleaned []DataRecord
+
+	for _, record := range records {
+		if err := ValidateRecord(record); err != nil {
+			continue
+		}
+		cleaned = append(cleaned, record)
+	}
+
+	cleaned = RemoveDuplicates(cleaned)
+
+	if len(cleaned) == 0 {
+		return nil, errors.New("no valid records after cleaning")
+	}
+
+	return cleaned, nil
+}
+
+func main() {
+	sampleData := []DataRecord{
+		{1, "John Doe", "john@example.com", 30},
+		{2, "Jane Smith", "jane@example.com", 25},
+		{1, "John Doe", "john@example.com", 30},
+		{3, "", "invalid-email", 200},
+		{4, "Bob Wilson", "bob@example.com", 45},
+	}
+
+	cleaned, err := CleanData(sampleData)
+	if err != nil {
+		fmt.Printf("Error cleaning data: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Original records: %d\n", len(sampleData))
+	fmt.Printf("Cleaned records: %d\n", len(cleaned))
+
+	for _, record := range cleaned {
+		fmt.Printf("ID: %d, Name: %s, Email: %s, Age: %d\n",
+			record.ID, record.Name, record.Email, record.Age)
+	}
+}
