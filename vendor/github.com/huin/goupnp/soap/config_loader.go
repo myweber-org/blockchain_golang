@@ -83,3 +83,66 @@ func getEnvBool(key string, defaultValue bool) (bool, error) {
 	}
 	return defaultValue, nil
 }
+package config
+
+import (
+	"errors"
+	"os"
+	"strconv"
+	"strings"
+)
+
+type AppConfig struct {
+	ServerPort   int
+	DatabaseURL  string
+	LogLevel     string
+	CacheEnabled bool
+	MaxWorkers   int
+}
+
+func LoadConfig() (*AppConfig, error) {
+	cfg := &AppConfig{}
+
+	portStr := getEnvOrDefault("SERVER_PORT", "8080")
+	port, err := strconv.Atoi(portStr)
+	if err != nil || port < 1 || port > 65535 {
+		return nil, errors.New("invalid SERVER_PORT value")
+	}
+	cfg.ServerPort = port
+
+	dbURL := getEnvOrDefault("DATABASE_URL", "postgres://localhost:5432/appdb")
+	if strings.TrimSpace(dbURL) == "" {
+		return nil, errors.New("DATABASE_URL cannot be empty")
+	}
+	cfg.DatabaseURL = dbURL
+
+	cfg.LogLevel = getEnvOrDefault("LOG_LEVEL", "info")
+	validLogLevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
+	if !validLogLevels[strings.ToLower(cfg.LogLevel)] {
+		return nil, errors.New("invalid LOG_LEVEL value")
+	}
+
+	cacheStr := getEnvOrDefault("CACHE_ENABLED", "true")
+	cacheEnabled, err := strconv.ParseBool(cacheStr)
+	if err != nil {
+		return nil, errors.New("invalid CACHE_ENABLED value")
+	}
+	cfg.CacheEnabled = cacheEnabled
+
+	workersStr := getEnvOrDefault("MAX_WORKERS", "10")
+	maxWorkers, err := strconv.Atoi(workersStr)
+	if err != nil || maxWorkers < 1 || maxWorkers > 100 {
+		return nil, errors.New("MAX_WORKERS must be between 1 and 100")
+	}
+	cfg.MaxWorkers = maxWorkers
+
+	return cfg, nil
+}
+
+func getEnvOrDefault(key, defaultValue string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	return value
+}
