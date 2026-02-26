@@ -103,3 +103,108 @@ func main() {
 	fmt.Printf("Average value: %.2f\n", avg)
 	fmt.Printf("Maximum value: %.2f\n", max)
 }
+package main
+
+import (
+    "encoding/csv"
+    "fmt"
+    "io"
+    "os"
+    "strings"
+)
+
+type CSVProcessor struct {
+    filePath   string
+    delimiter  rune
+    hasHeaders bool
+}
+
+func NewCSVProcessor(filePath string, delimiter rune, hasHeaders bool) *CSVProcessor {
+    return &CSVProcessor{
+        filePath:   filePath,
+        delimiter:  delimiter,
+        hasHeaders: hasHeaders,
+    }
+}
+
+func (p *CSVProcessor) ValidateAndClean() ([]map[string]string, error) {
+    file, err := os.Open(p.filePath)
+    if err != nil {
+        return nil, fmt.Errorf("failed to open file: %w", err)
+    }
+    defer file.Close()
+
+    reader := csv.NewReader(file)
+    reader.Comma = p.delimiter
+    reader.TrimLeadingSpace = true
+
+    var headers []string
+    var records []map[string]string
+
+    for lineNum := 1; ; lineNum++ {
+        row, err := reader.Read()
+        if err == io.EOF {
+            break
+        }
+        if err != nil {
+            return nil, fmt.Errorf("line %d: read error: %w", lineNum, err)
+        }
+
+        if lineNum == 1 && p.hasHeaders {
+            headers = p.cleanRow(row)
+            continue
+        }
+
+        cleanedRow := p.cleanRow(row)
+        if len(cleanedRow) == 0 {
+            continue
+        }
+
+        var record map[string]string
+        if p.hasHeaders {
+            if len(headers) != len(cleanedRow) {
+                return nil, fmt.Errorf("line %d: column count mismatch", lineNum)
+            }
+            record = make(map[string]string)
+            for i, header := range headers {
+                record[header] = cleanedRow[i]
+            }
+        } else {
+            record = make(map[string]string)
+            for i, value := range cleanedRow {
+                record[fmt.Sprintf("col%d", i+1)] = value
+            }
+        }
+        records = append(records, record)
+    }
+
+    return records, nil
+}
+
+func (p *CSVProcessor) cleanRow(row []string) []string {
+    cleaned := make([]string, 0, len(row))
+    for _, cell := range row {
+        cleanedCell := strings.TrimSpace(cell)
+        if cleanedCell == "" || cleanedCell == "NULL" || cleanedCell == "null" {
+            cleanedCell = "N/A"
+        }
+        cleaned = append(cleaned, cleanedCell)
+    }
+    return cleaned
+}
+
+func main() {
+    processor := NewCSVProcessor("input.csv", ',', true)
+    records, err := processor.ValidateAndClean()
+    if err != nil {
+        fmt.Printf("Error processing CSV: %v\n", err)
+        return
+    }
+
+    fmt.Printf("Successfully processed %d records\n", len(records))
+    for i, record := range records {
+        if i < 3 {
+            fmt.Printf("Record %d: %v\n", i+1, record)
+        }
+    }
+}
