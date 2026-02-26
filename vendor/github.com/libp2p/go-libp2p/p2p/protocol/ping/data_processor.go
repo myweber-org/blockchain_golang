@@ -87,3 +87,45 @@ func main() {
 
 	generateReport(records)
 }
+package main
+
+import (
+	"regexp"
+	"strings"
+)
+
+// CleanString removes extra whitespace and normalizes line endings
+func CleanString(input string) string {
+	// Replace multiple spaces with single space
+	re := regexp.MustCompile(`\s+`)
+	cleaned := re.ReplaceAllString(input, " ")
+	
+	// Trim leading/trailing whitespace
+	cleaned = strings.TrimSpace(cleaned)
+	
+	// Normalize line endings to Unix style
+	cleaned = strings.ReplaceAll(cleaned, "\r\n", "\n")
+	cleaned = strings.ReplaceAll(cleaned, "\r", "\n")
+	
+	return cleaned
+}
+
+// NormalizeWhitespace ensures consistent spacing around punctuation
+func NormalizeWhitespace(input string) string {
+	// Add space after punctuation if missing
+	re := regexp.MustCompile(`([.,!?])([^\s])`)
+	normalized := re.ReplaceAllString(input, "$1 $2")
+	
+	// Remove space before punctuation
+	re = regexp.MustCompile(`\s+([.,!?])`)
+	normalized = re.ReplaceAllString(normalized, "$1")
+	
+	return normalized
+}
+
+// ProcessInput applies all cleaning and normalization steps
+func ProcessInput(input string) string {
+	cleaned := CleanString(input)
+	normalized := NormalizeWhitespace(cleaned)
+	return normalized
+}
