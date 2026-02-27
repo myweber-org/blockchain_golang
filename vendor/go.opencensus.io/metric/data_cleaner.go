@@ -1,23 +1,55 @@
+
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
-func RemoveDuplicates(nums []int) []int {
-	seen := make(map[int]bool)
-	result := []int{}
+type DataCleaner struct {
+	seen map[string]bool
+}
 
-	for _, num := range nums {
-		if !seen[num] {
-			seen[num] = true
-			result = append(result, num)
+func NewDataCleaner() *DataCleaner {
+	return &DataCleaner{
+		seen: make(map[string]bool),
+	}
+}
+
+func (dc *DataCleaner) Normalize(input string) string {
+	return strings.ToLower(strings.TrimSpace(input))
+}
+
+func (dc *DataCleaner) IsDuplicate(value string) bool {
+	normalized := dc.Normalize(value)
+	if dc.seen[normalized] {
+		return true
+	}
+	dc.seen[normalized] = true
+	return false
+}
+
+func (dc *DataCleaner) Deduplicate(values []string) []string {
+	dc.seen = make(map[string]bool)
+	var result []string
+	for _, v := range values {
+		if !dc.IsDuplicate(v) {
+			result = append(result, v)
 		}
 	}
 	return result
 }
 
 func main() {
-	input := []int{1, 2, 2, 3, 4, 4, 5, 1, 6}
-	cleaned := RemoveDuplicates(input)
-	fmt.Printf("Original: %v\n", input)
-	fmt.Printf("Cleaned: %v\n", cleaned)
+	cleaner := NewDataCleaner()
+	
+	data := []string{"Apple", "apple ", " BANANA", "banana", "Cherry"}
+	
+	fmt.Println("Original data:", data)
+	
+	deduped := cleaner.Deduplicate(data)
+	fmt.Println("Deduplicated:", deduped)
+	
+	testValue := "  APPLE  "
+	fmt.Printf("Is '%s' duplicate? %v\n", testValue, cleaner.IsDuplicate(testValue))
 }
