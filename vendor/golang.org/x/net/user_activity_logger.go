@@ -16,42 +16,30 @@ func NewActivityLogger(handler http.Handler) *ActivityLogger {
 
 func (al *ActivityLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	
-	al.handler.ServeHTTP(w, r)
-	
+	recorder := &responseRecorder{
+		ResponseWriter: w,
+		statusCode:     http.StatusOK,
+	}
+
+	al.handler.ServeHTTP(recorder, r)
+
 	duration := time.Since(start)
-	
-	log.Printf("Activity: %s %s from %s took %v",
+	log.Printf(
+		"%s %s %d %s %s",
 		r.Method,
 		r.URL.Path,
-		r.RemoteAddr,
+		recorder.statusCode,
 		duration,
+		r.RemoteAddr,
 	)
 }
-package middleware
 
-import (
-	"log"
-	"net/http"
-	"time"
-)
-
-type ActivityLogger struct {
-	handler http.Handler
+type responseRecorder struct {
+	http.ResponseWriter
+	statusCode int
 }
 
-func NewActivityLogger(handler http.Handler) *ActivityLogger {
-	return &ActivityLogger{handler: handler}
-}
-
-func (al *ActivityLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	start := time.Now()
-	userAgent := r.UserAgent()
-	clientIP := r.RemoteAddr
-	requestPath := r.URL.Path
-
-	al.handler.ServeHTTP(w, r)
-
-	duration := time.Since(start)
-	log.Printf("Activity: %s | %s | %s | %v", clientIP, userAgent, requestPath, duration)
+func (rr *responseRecorder) WriteHeader(code int) {
+	rr.statusCode = code
+	rr.ResponseWriter.WriteHeader(code)
 }
