@@ -223,4 +223,67 @@ func Authenticate(next http.Handler) http.Handler {
         r.Header.Set("X-Role", claims.Role)
         next.ServeHTTP(w, r)
     })
+}package middleware
+
+import (
+	"net/http"
+	"strings"
+)
+
+type UserAuthenticator struct {
+	secretKey string
+}
+
+func NewUserAuthenticator(secretKey string) *UserAuthenticator {
+	return &UserAuthenticator{secretKey: secretKey}
+}
+
+func (ua *UserAuthenticator) ValidateToken(token string) (bool, error) {
+	if token == "" {
+		return false, nil
+	}
+
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return false, nil
+	}
+
+	return validateSignature(parts, ua.secretKey), nil
+}
+
+func (ua *UserAuthenticator) Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := extractToken(r)
+		valid, err := ua.ValidateToken(token)
+		
+		if err != nil {
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+		
+		if !valid {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		
+		next.ServeHTTP(w, r)
+	})
+}
+
+func extractToken(r *http.Request) string {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		return ""
+	}
+	
+	const bearerPrefix = "Bearer "
+	if strings.HasPrefix(authHeader, bearerPrefix) {
+		return authHeader[len(bearerPrefix):]
+	}
+	
+	return authHeader
+}
+
+func validateSignature(parts []string, secretKey string) bool {
+	return len(parts[2]) > 0 && parts[2] == secretKey
 }
