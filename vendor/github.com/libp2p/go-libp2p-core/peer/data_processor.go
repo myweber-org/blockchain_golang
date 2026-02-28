@@ -132,3 +132,52 @@ func main() {
 
 	fmt.Println("Data processing completed successfully")
 }
+package data_processor
+
+import (
+	"regexp"
+	"strings"
+	"unicode"
+)
+
+type DataCleaner struct {
+	whitespaceRegex *regexp.Regexp
+	emailRegex      *regexp.Regexp
+}
+
+func NewDataCleaner() *DataCleaner {
+	return &DataCleaner{
+		whitespaceRegex: regexp.MustCompile(`\s+`),
+		emailRegex:      regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`),
+	}
+}
+
+func (dc *DataCleaner) NormalizeWhitespace(input string) string {
+	trimmed := strings.TrimSpace(input)
+	return dc.whitespaceRegex.ReplaceAllString(trimmed, " ")
+}
+
+func (dc *DataCleaner) RemoveSpecialCharacters(input string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsNumber(r) || unicode.IsSpace(r) {
+			return r
+		}
+		return -1
+	}, input)
+}
+
+func (dc *DataCleaner) ValidateEmail(email string) bool {
+	return dc.emailRegex.MatchString(email)
+}
+
+func (dc *DataCleaner) ProcessUserInput(rawInput string) (string, bool) {
+	cleaned := dc.NormalizeWhitespace(rawInput)
+	if cleaned == "" {
+		return "", false
+	}
+
+	final := dc.RemoveSpecialCharacters(cleaned)
+	isValid := len(final) > 0 && len(final) <= 1000
+
+	return final, isValid
+}
