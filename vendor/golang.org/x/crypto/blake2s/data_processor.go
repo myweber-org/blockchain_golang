@@ -5,65 +5,58 @@ import (
 	"errors"
 	"regexp"
 	"strings"
-	"time"
 )
 
 type UserProfile struct {
 	ID        int
 	Email     string
 	Username  string
-	BirthDate string
-	CreatedAt time.Time
+	Age       int
+	Active    bool
 }
 
 var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 
-func ValidateEmail(email string) error {
-	if !emailRegex.MatchString(email) {
+func ValidateProfile(p UserProfile) error {
+	if p.ID <= 0 {
+		return errors.New("invalid user ID")
+	}
+
+	if !emailRegex.MatchString(p.Email) {
 		return errors.New("invalid email format")
 	}
+
+	if len(strings.TrimSpace(p.Username)) < 3 {
+		return errors.New("username must be at least 3 characters")
+	}
+
+	if p.Age < 0 || p.Age > 150 {
+		return errors.New("age must be between 0 and 150")
+	}
+
 	return nil
 }
 
-func NormalizeUsername(username string) string {
-	return strings.ToLower(strings.TrimSpace(username))
+func TransformProfile(p *UserProfile) {
+	p.Username = strings.ToLower(strings.TrimSpace(p.Username))
+	p.Email = strings.ToLower(strings.TrimSpace(p.Email))
 }
 
-func CalculateAge(birthDate string) (int, error) {
-	parsedDate, err := time.Parse("2006-01-02", birthDate)
-	if err != nil {
-		return 0, errors.New("invalid date format, expected YYYY-MM-DD")
+func ProcessUserData(profiles []UserProfile) ([]UserProfile, error) {
+	var validProfiles []UserProfile
+
+	for _, profile := range profiles {
+		if err := ValidateProfile(profile); err != nil {
+			continue
+		}
+
+		TransformProfile(&profile)
+		validProfiles = append(validProfiles, profile)
 	}
 
-	now := time.Now()
-	age := now.Year() - parsedDate.Year()
-
-	if now.YearDay() < parsedDate.YearDay() {
-		age--
+	if len(validProfiles) == 0 {
+		return nil, errors.New("no valid profiles found")
 	}
 
-	if age < 0 {
-		return 0, errors.New("birth date cannot be in the future")
-	}
-
-	return age, nil
-}
-
-func ProcessUserProfile(profile UserProfile) (UserProfile, error) {
-	if err := ValidateEmail(profile.Email); err != nil {
-		return profile, err
-	}
-
-	profile.Username = NormalizeUsername(profile.Username)
-
-	age, err := CalculateAge(profile.BirthDate)
-	if err != nil {
-		return profile, err
-	}
-
-	if age < 13 {
-		return profile, errors.New("user must be at least 13 years old")
-	}
-
-	return profile, nil
+	return validProfiles, nil
 }
