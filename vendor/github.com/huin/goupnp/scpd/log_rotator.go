@@ -170,3 +170,104 @@ func main() {
 
 	fmt.Println("Log rotation test completed")
 }
+package main
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"sync"
+)
+
+type RotatingWriter struct {
+	mu          sync.Mutex
+	currentFile *os.File
+	maxSize     int64
+	basePath    string
+	fileIndex   int
+	currentSize int64
+}
+
+func NewRotatingWriter(basePath string, maxSize int64) (*RotatingWriter, error) {
+	w := &RotatingWriter{
+		maxSize:  maxSize,
+		basePath: basePath,
+		fileIndex: 0,
+	}
+	if err := w.openNewFile(); err != nil {
+		return nil, err
+	}
+	return w, nil
+}
+
+func (w *RotatingWriter) openNewFile() error {
+	filename := fmt.Sprintf("%s.%d", w.basePath, w.fileIndex)
+	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	if w.currentFile != nil {
+		w.currentFile.Close()
+	}
+	w.currentFile = file
+	w.fileIndex++
+	w.currentSize = 0
+
+	stat, err := file.Stat()
+	if err == nil {
+		w.currentSize = stat.Size()
+	}
+	return nil
+}
+
+func (w *RotatingWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.currentSize+int64(len(p)) > w.maxSize {
+		if err := w.openNewFile(); err != nil {
+			return 0, err
+		}
+	}
+
+	n, err := w.currentFile.Write(p)
+	if err == nil {
+		w.currentSize += int64(n)
+	}
+	return n, err
+}
+
+func (w *RotatingWriter) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.currentFile != nil {
+		return w.currentFile.Close()
+	}
+	return nil
+}
+
+func (w *RotatingWriter) Rotate() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.openNewFile()
+}
+
+func main() {
+	writer, err := NewRotatingWriter("app.log", 1024*1024)
+	if err != nil {
+		fmt.Printf("Failed to create rotating writer: %v\n", err)
+		return
+	}
+	defer writer.Close()
+
+	for i := 0; i < 100; i++ {
+		line := fmt.Sprintf("Log entry number %d: Some sample log data here.\n", i+1)
+		if _, err := writer.Write([]byte(line)); err != nil {
+			fmt.Printf("Write error: %v\n", err)
+			break
+		}
+	}
+
+	fmt.Println("Log rotation test completed. Check app.log.* files.")
+}
