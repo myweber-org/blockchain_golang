@@ -193,3 +193,137 @@ func main() {
 	fmt.Printf("Average value: %.2f\n", average)
 	fmt.Printf("Maximum value: %.2f\n", max)
 }
+package main
+
+import (
+    "encoding/csv"
+    "encoding/json"
+    "fmt"
+    "io"
+    "os"
+    "strconv"
+)
+
+type Record struct {
+    ID      int     `json:"id"`
+    Name    string  `json:"name"`
+    Value   float64 `json:"value"`
+    Active  bool    `json:"active"`
+}
+
+func processCSVFile(filename string) ([]Record, error) {
+    file, err := os.Open(filename)
+    if err != nil {
+        return nil, fmt.Errorf("failed to open file: %w", err)
+    }
+    defer file.Close()
+
+    reader := csv.NewReader(file)
+    reader.TrimLeadingSpace = true
+
+    var records []Record
+    lineNumber := 0
+
+    for {
+        lineNumber++
+        row, err := reader.Read()
+        if err == io.EOF {
+            break
+        }
+        if err != nil {
+            return nil, fmt.Errorf("csv read error on line %d: %w", lineNumber, err)
+        }
+
+        if len(row) != 4 {
+            return nil, fmt.Errorf("invalid column count on line %d: expected 4, got %d", lineNumber, len(row))
+        }
+
+        id, err := strconv.Atoi(row[0])
+        if err != nil {
+            return nil, fmt.Errorf("invalid ID on line %d: %w", lineNumber, err)
+        }
+
+        value, err := strconv.ParseFloat(row[2], 64)
+        if err != nil {
+            return nil, fmt.Errorf("invalid value on line %d: %w", lineNumber, err)
+        }
+
+        active, err := strconv.ParseBool(row[3])
+        if err != nil {
+            return nil, fmt.Errorf("invalid active flag on line %d: %w", lineNumber, err)
+        }
+
+        record := Record{
+            ID:     id,
+            Name:   row[1],
+            Value:  value,
+            Active: active,
+        }
+        records = append(records, record)
+    }
+
+    return records, nil
+}
+
+func convertToJSON(records []Record) (string, error) {
+    jsonData, err := json.MarshalIndent(records, "", "  ")
+    if err != nil {
+        return "", fmt.Errorf("json marshaling failed: %w", err)
+    }
+    return string(jsonData), nil
+}
+
+func filterActiveRecords(records []Record) []Record {
+    var activeRecords []Record
+    for _, record := range records {
+        if record.Active {
+            activeRecords = append(activeRecords, record)
+        }
+    }
+    return activeRecords
+}
+
+func calculateTotalValue(records []Record) float64 {
+    var total float64
+    for _, record := range records {
+        total += record.Value
+    }
+    return total
+}
+
+func main() {
+    if len(os.Args) != 2 {
+        fmt.Println("Usage: data_processor <csv_file>")
+        os.Exit(1)
+    }
+
+    filename := os.Args[1]
+    records, err := processCSVFile(filename)
+    if err != nil {
+        fmt.Printf("Error processing file: %v\n", err)
+        os.Exit(1)
+    }
+
+    fmt.Printf("Processed %d records\n", len(records))
+
+    activeRecords := filterActiveRecords(records)
+    fmt.Printf("Active records: %d\n", len(activeRecords))
+
+    totalValue := calculateTotalValue(records)
+    fmt.Printf("Total value: %.2f\n", totalValue)
+
+    jsonOutput, err := convertToJSON(records)
+    if err != nil {
+        fmt.Printf("Error converting to JSON: %v\n", err)
+        os.Exit(1)
+    }
+
+    outputFile := "output.json"
+    err = os.WriteFile(outputFile, []byte(jsonOutput), 0644)
+    if err != nil {
+        fmt.Printf("Error writing JSON file: %v\n", err)
+        os.Exit(1)
+    }
+
+    fmt.Printf("JSON output written to %s\n", outputFile)
+}
