@@ -4,119 +4,107 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 )
 
-func encryptFile(inputPath, outputPath, keyHex string) error {
-	key, err := hex.DecodeString(keyHex)
-	if err != nil {
-		return fmt.Errorf("invalid key: %v", err)
-	}
-	if len(key) != 32 {
-		return fmt.Errorf("key must be 32 bytes for AES-256")
-	}
-
+func encryptFile(inputPath, outputPath string, key []byte) error {
 	plaintext, err := os.ReadFile(inputPath)
 	if err != nil {
-		return fmt.Errorf("read file error: %v", err)
+		return err
 	}
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return fmt.Errorf("cipher creation error: %v", err)
+		return err
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return fmt.Errorf("GCM creation error: %v", err)
+		return err
 	}
 
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
-		return fmt.Errorf("nonce generation error: %v", err)
+		return err
 	}
 
 	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
 
-	if err := os.WriteFile(outputPath, ciphertext, 0644); err != nil {
-		return fmt.Errorf("write file error: %v", err)
-	}
-
-	return nil
+	return os.WriteFile(outputPath, ciphertext, 0644)
 }
 
-func decryptFile(inputPath, outputPath, keyHex string) error {
-	key, err := hex.DecodeString(keyHex)
-	if err != nil {
-		return fmt.Errorf("invalid key: %v", err)
-	}
-	if len(key) != 32 {
-		return fmt.Errorf("key must be 32 bytes for AES-256")
-	}
-
+func decryptFile(inputPath, outputPath string, key []byte) error {
 	ciphertext, err := os.ReadFile(inputPath)
 	if err != nil {
-		return fmt.Errorf("read file error: %v", err)
+		return err
 	}
 
 	block, err := aes.NewCipher(key)
 	if err != nil {
-		return fmt.Errorf("cipher creation error: %v", err)
+		return err
 	}
 
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return fmt.Errorf("GCM creation error: %v", err)
+		return err
 	}
 
 	nonceSize := gcm.NonceSize()
 	if len(ciphertext) < nonceSize {
-		return fmt.Errorf("ciphertext too short")
+		return errors.New("ciphertext too short")
 	}
 
 	nonce, ciphertext := ciphertext[:nonceSize], ciphertext[nonceSize:]
 	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
 	if err != nil {
-		return fmt.Errorf("decryption error: %v", err)
+		return err
 	}
 
-	if err := os.WriteFile(outputPath, plaintext, 0644); err != nil {
-		return fmt.Errorf("write file error: %v", err)
-	}
+	return os.WriteFile(outputPath, plaintext, 0644)
+}
 
-	return nil
+func generateKey() ([]byte, error) {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return nil, err
+	}
+	return key, nil
 }
 
 func main() {
-	if len(os.Args) < 5 {
-		fmt.Println("Usage: go run file_encryptor.go <encrypt|decrypt> <input> <output> <hex_key>")
-		fmt.Println("Example: go run file_encryptor.go encrypt secret.txt encrypted.bin a1b2c3d4e5f678901234567890123456789012345678901234567890123456")
+	if len(os.Args) < 4 {
+		fmt.Println("Usage: go run file_encryptor.go <encrypt|decrypt> <input> <output>")
 		os.Exit(1)
 	}
 
-	action := os.Args[1]
-	inputPath := os.Args[2]
-	outputPath := os.Args[3]
-	keyHex := os.Args[4]
+	key, err := generateKey()
+	if err != nil {
+		fmt.Printf("Key generation failed: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Generated key: %x\n", key)
 
-	var err error
-	switch action {
+	mode := os.Args[1]
+	inputFile := os.Args[2]
+	outputFile := os.Args[3]
+
+	switch mode {
 	case "encrypt":
-		err = encryptFile(inputPath, outputPath, keyHex)
+		err = encryptFile(inputFile, outputFile, key)
 	case "decrypt":
-		err = decryptFile(inputPath, outputPath, keyHex)
+		err = decryptFile(inputFile, outputFile, key)
 	default:
-		fmt.Printf("Unknown action: %s\n", action)
+		fmt.Println("Invalid mode. Use 'encrypt' or 'decrypt'")
 		os.Exit(1)
 	}
 
 	if err != nil {
-		fmt.Printf("Error: %v\n", err)
+		fmt.Printf("Operation failed: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("Operation completed successfully: %s -> %s\n", inputPath, outputPath)
+	fmt.Printf("Operation completed successfully. Output: %s\n", outputFile)
 }
