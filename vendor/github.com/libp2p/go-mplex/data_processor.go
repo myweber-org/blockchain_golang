@@ -79,4 +79,61 @@ func main() {
 	}
 
 	fmt.Println("CSV processing completed successfully")
+}package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+type UserData struct {
+	Username string
+	Email    string
+	Age      int
+}
+
+func ValidateUserData(data UserData) (bool, []string) {
+	var errors []string
+
+	if strings.TrimSpace(data.Username) == "" {
+		errors = append(errors, "username cannot be empty")
+	}
+	if !strings.Contains(data.Email, "@") {
+		errors = append(errors, "invalid email format")
+	}
+	if data.Age < 0 || data.Age > 150 {
+		errors = append(errors, "age must be between 0 and 150")
+	}
+
+	return len(errors) == 0, errors
+}
+
+func TransformUsername(data *UserData) {
+	data.Username = strings.ToLower(strings.TrimSpace(data.Username))
+}
+
+func ProcessUserInput(data UserData) (UserData, error) {
+	TransformUsername(&data)
+
+	if valid, errs := ValidateUserData(data); !valid {
+		return data, fmt.Errorf("validation failed: %v", strings.Join(errs, "; "))
+	}
+
+	return data, nil
+}
+
+func main() {
+	sampleData := UserData{
+		Username: "  TestUser  ",
+		Email:    "user@example.com",
+		Age:      25,
+	}
+
+	result, err := ProcessUserInput(sampleData)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+
+	fmt.Printf("Processed data: %+v\n", result)
 }
