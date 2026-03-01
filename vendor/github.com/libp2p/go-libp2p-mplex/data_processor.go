@@ -1,87 +1,123 @@
 package main
 
 import (
-	"encoding/json"
+	"encoding/csv"
 	"fmt"
-	"regexp"
+	"io"
+	"os"
+	"strconv"
 	"strings"
 )
 
-type UserProfile struct {
-	ID        int    `json:"id"`
-	Username  string `json:"username"`
-	Email     string `json:"email"`
-	Age       int    `json:"age"`
-	Active    bool   `json:"active"`
-	Tags      []string `json:"tags"`
+type DataRecord struct {
+	ID    int
+	Name  string
+	Value float64
+	Valid bool
 }
 
-func ValidateEmail(email string) bool {
-	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
-	return emailRegex.MatchString(email)
+func ProcessCSVFile(filePath string) ([]DataRecord, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	reader.TrimLeadingSpace = true
+
+	var records []DataRecord
+	lineNumber := 0
+
+	for {
+		lineNumber++
+		row, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("csv read error at line %d: %w", lineNumber, err)
+		}
+
+		if len(row) < 4 {
+			continue
+		}
+
+		record, err := parseRow(row)
+		if err != nil {
+			fmt.Printf("skipping invalid row at line %d: %v\n", lineNumber, err)
+			continue
+		}
+
+		records = append(records, record)
+	}
+
+	return records, nil
 }
 
-func NormalizeUsername(username string) string {
-	return strings.ToLower(strings.TrimSpace(username))
+func parseRow(row []string) (DataRecord, error) {
+	var record DataRecord
+
+	id, err := strconv.Atoi(strings.TrimSpace(row[0]))
+	if err != nil {
+		return record, fmt.Errorf("invalid ID format: %w", err)
+	}
+	record.ID = id
+
+	record.Name = strings.TrimSpace(row[1])
+
+	value, err := strconv.ParseFloat(strings.TrimSpace(row[2]), 64)
+	if err != nil {
+		return record, fmt.Errorf("invalid value format: %w", err)
+	}
+	record.Value = value
+
+	validStr := strings.ToLower(strings.TrimSpace(row[3]))
+	record.Valid = validStr == "true" || validStr == "yes" || validStr == "1"
+
+	return record, nil
 }
 
-func FilterInactiveUsers(users []UserProfile) []UserProfile {
-	var activeUsers []UserProfile
-	for _, user := range users {
-		if user.Active {
-			activeUsers = append(activeUsers, user)
+func FilterValidRecords(records []DataRecord) []DataRecord {
+	var validRecords []DataRecord
+	for _, record := range records {
+		if record.Valid {
+			validRecords = append(validRecords, record)
 		}
 	}
-	return activeUsers
+	return validRecords
 }
 
-func TransformUserData(users []UserProfile) ([]map[string]interface{}, error) {
-	var transformed []map[string]interface{}
-	
-	for _, user := range users {
-		if !ValidateEmail(user.Email) {
-			return nil, fmt.Errorf("invalid email for user %d", user.ID)
-		}
-		
-		data := map[string]interface{}{
-			"user_id":   user.ID,
-			"username":  NormalizeUsername(user.Username),
-			"email":     strings.ToLower(user.Email),
-			"age_group": categorizeAge(user.Age),
-			"tag_count": len(user.Tags),
-			"status":    "active",
-		}
-		
-		if !user.Active {
-			data["status"] = "inactive"
-		}
-		
-		transformed = append(transformed, data)
+func CalculateAverage(records []DataRecord) float64 {
+	if len(records) == 0 {
+		return 0.0
 	}
-	
-	return transformed, nil
+
+	var sum float64
+	for _, record := range records {
+		sum += record.Value
+	}
+	return sum / float64(len(records))
 }
 
-func categorizeAge(age int) string {
-	switch {
-	case age < 18:
-		return "minor"
-	case age >= 18 && age <= 35:
-		return "young_adult"
-	case age > 35 && age <= 60:
-		return "adult"
-	default:
-		return "senior"
+func main() {
+	if len(os.Args) < 2 {
+		fmt.Println("Usage: data_processor <csv_file_path>")
+		os.Exit(1)
 	}
-}
 
-func ProcessUserJSON(jsonData []byte) ([]map[string]interface{}, error) {
-	var users []UserProfile
-	
-	if err := json.Unmarshal(jsonData, &users); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %v", err)
+	filePath := os.Args[1]
+	records, err := ProcessCSVFile(filePath)
+	if err != nil {
+		fmt.Printf("Error processing file: %v\n", err)
+		os.Exit(1)
 	}
-	
-	activeUsers := FilterInactiveUsers(users)
-	return TransformUserData(activeUsers)
+
+	fmt.Printf("Total records processed: %d\n", len(records))
+
+	validRecords := FilterValidRecords(records)
+	fmt.Printf("Valid records: %d\n", len(validRecords))
+
+	average := CalculateAverage(validRecords)
+	fmt.Printf("Average value of valid records: %.2f\n", average)
 }
