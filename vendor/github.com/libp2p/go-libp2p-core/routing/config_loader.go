@@ -70,4 +70,66 @@ func overrideInt(field *int, envVar string) {
 			*field = intVal
 		}
 	}
+}package config
+
+import (
+    "fmt"
+    "os"
+    "strings"
+
+    "gopkg.in/yaml.v3"
+)
+
+type Config struct {
+    Server struct {
+        Host string `yaml:"host"`
+        Port int    `yaml:"port"`
+    } `yaml:"server"`
+    Database struct {
+        Host     string `yaml:"host"`
+        Username string `yaml:"username"`
+        Password string `yaml:"password"`
+        Name     string `yaml:"name"`
+    } `yaml:"database"`
+    LogLevel string `yaml:"log_level"`
+}
+
+func LoadConfig(path string) (*Config, error) {
+    data, err := os.ReadFile(path)
+    if err != nil {
+        return nil, fmt.Errorf("failed to read config file: %w", err)
+    }
+
+    var cfg Config
+    if err := yaml.Unmarshal(data, &cfg); err != nil {
+        return nil, fmt.Errorf("failed to parse YAML: %w", err)
+    }
+
+    cfg.overrideFromEnv()
+
+    return &cfg, nil
+}
+
+func (c *Config) overrideFromEnv() {
+    if host := os.Getenv("APP_SERVER_HOST"); host != "" {
+        c.Server.Host = host
+    }
+    if port := os.Getenv("APP_SERVER_PORT"); port != "" {
+        fmt.Sscanf(port, "%d", &c.Server.Port)
+    }
+    if host := os.Getenv("APP_DB_HOST"); host != "" {
+        c.Database.Host = host
+    }
+    if user := os.Getenv("APP_DB_USERNAME"); user != "" {
+        c.Database.Username = user
+    }
+    if pass := os.Getenv("APP_DB_PASSWORD"); pass != "" {
+        c.Database.Password = pass
+    }
+    if name := os.Getenv("APP_DB_NAME"); name != "" {
+        c.Database.Name = name
+    }
+    if level := os.Getenv("APP_LOG_LEVEL"); level != "" {
+        c.LogLevel = strings.ToUpper(level)
+    }
 }
