@@ -172,4 +172,80 @@ func ValidateConfig(config *ServerConfig) error {
         return fmt.Errorf("database name is required")
     }
     return nil
+}package config
+
+import (
+    "fmt"
+    "io/ioutil"
+    "os"
+
+    "gopkg.in/yaml.v2"
+)
+
+type DatabaseConfig struct {
+    Host     string `yaml:"host"`
+    Port     int    `yaml:"port"`
+    Username string `yaml:"username"`
+    Password string `yaml:"password"`
+    Name     string `yaml:"name"`
+}
+
+type ServerConfig struct {
+    Port int    `yaml:"port"`
+    Mode string `yaml:"mode"`
+}
+
+type AppConfig struct {
+    Database DatabaseConfig `yaml:"database"`
+    Server   ServerConfig   `yaml:"server"`
+    LogLevel string         `yaml:"log_level"`
+}
+
+func LoadConfig(configPath string) (*AppConfig, error) {
+    if configPath == "" {
+        configPath = "config.yaml"
+    }
+
+    file, err := os.Open(configPath)
+    if err != nil {
+        return nil, fmt.Errorf("failed to open config file: %w", err)
+    }
+    defer file.Close()
+
+    data, err := ioutil.ReadAll(file)
+    if err != nil {
+        return nil, fmt.Errorf("failed to read config file: %w", err)
+    }
+
+    var config AppConfig
+    if err := yaml.Unmarshal(data, &config); err != nil {
+        return nil, fmt.Errorf("failed to parse YAML config: %w", err)
+    }
+
+    if config.LogLevel == "" {
+        config.LogLevel = "info"
+    }
+
+    if config.Server.Port == 0 {
+        config.Server.Port = 8080
+    }
+
+    if config.Server.Mode == "" {
+        config.Server.Mode = "development"
+    }
+
+    return &config, nil
+}
+
+func ValidateConfig(config *AppConfig) error {
+    if config.Database.Host == "" {
+        return fmt.Errorf("database host is required")
+    }
+    if config.Database.Port == 0 {
+        return fmt.Errorf("database port is required")
+    }
+    if config.Database.Name == "" {
+        return fmt.Errorf("database name is required")
+    }
+    return nil
 }
