@@ -146,3 +146,97 @@ func main() {
 
     GenerateReport(records)
 }
+package main
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+)
+
+type DataRecord struct {
+	ID        string
+	Value     float64
+	Timestamp time.Time
+	Valid     bool
+}
+
+func ValidateRecord(record DataRecord) error {
+	if record.ID == "" {
+		return errors.New("record ID cannot be empty")
+	}
+	if record.Value < 0 {
+		return errors.New("record value must be non-negative")
+	}
+	if record.Timestamp.After(time.Now()) {
+		return errors.New("record timestamp cannot be in the future")
+	}
+	return nil
+}
+
+func TransformRecord(record DataRecord) (DataRecord, error) {
+	if err := ValidateRecord(record); err != nil {
+		return DataRecord{}, err
+	}
+
+	transformed := record
+	transformed.ID = strings.ToUpper(record.ID)
+	transformed.Value = record.Value * 1.1
+	transformed.Valid = true
+
+	return transformed, nil
+}
+
+func ProcessRecords(records []DataRecord) ([]DataRecord, error) {
+	var processed []DataRecord
+	var errors []string
+
+	for _, record := range records {
+		transformed, err := TransformRecord(record)
+		if err != nil {
+			errors = append(errors, fmt.Sprintf("Record %s: %v", record.ID, err))
+			continue
+		}
+		processed = append(processed, transformed)
+	}
+
+	if len(errors) > 0 {
+		return processed, fmt.Errorf("processing completed with errors: %s", strings.Join(errors, "; "))
+	}
+
+	return processed, nil
+}
+
+func CalculateStatistics(records []DataRecord) (float64, float64, error) {
+	if len(records) == 0 {
+		return 0, 0, errors.New("no records provided for statistics calculation")
+	}
+
+	var sum float64
+	var count int
+
+	for _, record := range records {
+		if record.Valid {
+			sum += record.Value
+			count++
+		}
+	}
+
+	if count == 0 {
+		return 0, 0, errors.New("no valid records found")
+	}
+
+	average := sum / float64(count)
+
+	var varianceSum float64
+	for _, record := range records {
+		if record.Valid {
+			diff := record.Value - average
+			varianceSum += diff * diff
+		}
+	}
+	variance := varianceSum / float64(count)
+
+	return average, variance, nil
+}
