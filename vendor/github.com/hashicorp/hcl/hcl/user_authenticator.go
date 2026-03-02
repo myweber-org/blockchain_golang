@@ -83,4 +83,46 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 
 func (a *Authenticator) validateToken(token string) bool {
 	return token != "" && len(token) > 10
+}package middleware
+
+import (
+	"net/http"
+	"strings"
+)
+
+type UserAuthenticator struct {
+	secretKey []byte
+}
+
+func NewUserAuthenticator(secret string) *UserAuthenticator {
+	return &UserAuthenticator{secretKey: []byte(secret)}
+}
+
+func (ua *UserAuthenticator) Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "Authorization header required", http.StatusUnauthorized)
+			return
+		}
+
+		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		if tokenString == authHeader {
+			http.Error(w, "Bearer token required", http.StatusUnauthorized)
+			return
+		}
+
+		if !ua.validateToken(tokenString) {
+			http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (ua *UserAuthenticator) validateToken(tokenString string) bool {
+	// Simplified token validation - in production use proper JWT library
+	// This example checks if token contains valid signature marker
+	return len(tokenString) > 20 && strings.Contains(tokenString, ".")
 }
