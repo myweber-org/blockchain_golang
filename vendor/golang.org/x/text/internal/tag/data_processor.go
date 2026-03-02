@@ -2,48 +2,54 @@ package main
 
 import (
 	"errors"
-	"regexp"
 	"strings"
-	"time"
+	"unicode"
 )
 
-type UserProfile struct {
-	ID        int
-	Username  string
-	Email     string
-	Age       int
-	CreatedAt time.Time
+type UserData struct {
+	Username string
+	Email    string
+	Age      int
 }
 
-var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
-
-func ValidateProfile(profile UserProfile) error {
-	if profile.Username == "" {
+func ValidateUserData(data UserData) error {
+	if strings.TrimSpace(data.Username) == "" {
 		return errors.New("username cannot be empty")
 	}
-	if len(profile.Username) < 3 || len(profile.Username) > 50 {
-		return errors.New("username must be between 3 and 50 characters")
+	if len(data.Username) < 3 || len(data.Username) > 20 {
+		return errors.New("username must be between 3 and 20 characters")
 	}
-	if !emailRegex.MatchString(profile.Email) {
+	for _, r := range data.Username {
+		if !unicode.IsLetter(r) && !unicode.IsNumber(r) && r != '_' && r != '-' {
+			return errors.New("username contains invalid characters")
+		}
+	}
+
+	if !strings.Contains(data.Email, "@") || !strings.Contains(data.Email, ".") {
 		return errors.New("invalid email format")
 	}
-	if profile.Age < 0 || profile.Age > 150 {
+
+	if data.Age < 0 || data.Age > 150 {
 		return errors.New("age must be between 0 and 150")
 	}
+
 	return nil
 }
 
-func TransformProfile(profile UserProfile) UserProfile {
-	transformed := profile
-	transformed.Username = strings.ToLower(strings.TrimSpace(profile.Username))
-	transformed.Email = strings.ToLower(strings.TrimSpace(profile.Email))
-	return transformed
+func NormalizeUsername(username string) string {
+	return strings.ToLower(strings.TrimSpace(username))
 }
 
-func ProcessUserData(profile UserProfile) (UserProfile, error) {
-	if err := ValidateProfile(profile); err != nil {
-		return UserProfile{}, err
+func TransformUserData(data UserData) (UserData, error) {
+	if err := ValidateUserData(data); err != nil {
+		return UserData{}, err
 	}
-	transformed := TransformProfile(profile)
+
+	transformed := UserData{
+		Username: NormalizeUsername(data.Username),
+		Email:    strings.ToLower(strings.TrimSpace(data.Email)),
+		Age:      data.Age,
+	}
+
 	return transformed, nil
 }
