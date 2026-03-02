@@ -156,4 +156,68 @@ func getEnvIntOrDefault(key string, defaultValue int) int {
 		}
 	}
 	return defaultValue
+}package config
+
+import (
+    "fmt"
+    "io/ioutil"
+    "os"
+
+    "gopkg.in/yaml.v2"
+)
+
+type DatabaseConfig struct {
+    Host     string `yaml:"host"`
+    Port     int    `yaml:"port"`
+    Username string `yaml:"username"`
+    Password string `yaml:"password"`
+    Name     string `yaml:"name"`
+}
+
+type ServerConfig struct {
+    Port         int            `yaml:"port"`
+    Debug        bool           `yaml:"debug"`
+    Database     DatabaseConfig `yaml:"database"`
+    AllowedHosts []string       `yaml:"allowed_hosts"`
+}
+
+func LoadConfig(path string) (*ServerConfig, error) {
+    if _, err := os.Stat(path); os.IsNotExist(err) {
+        return nil, fmt.Errorf("config file not found: %s", path)
+    }
+
+    data, err := ioutil.ReadFile(path)
+    if err != nil {
+        return nil, fmt.Errorf("failed to read config file: %v", err)
+    }
+
+    var config ServerConfig
+    if err := yaml.Unmarshal(data, &config); err != nil {
+        return nil, fmt.Errorf("failed to parse YAML: %v", err)
+    }
+
+    if config.Database.Host == "" {
+        config.Database.Host = "localhost"
+    }
+    if config.Database.Port == 0 {
+        config.Database.Port = 5432
+    }
+    if config.Port == 0 {
+        config.Port = 8080
+    }
+
+    return &config, nil
+}
+
+func ValidateConfig(config *ServerConfig) error {
+    if config.Database.Username == "" {
+        return fmt.Errorf("database username is required")
+    }
+    if config.Database.Name == "" {
+        return fmt.Errorf("database name is required")
+    }
+    if len(config.AllowedHosts) == 0 {
+        config.AllowedHosts = []string{"localhost", "127.0.0.1"}
+    }
+    return nil
 }
