@@ -105,4 +105,59 @@ func CalculateStats(records []Record) (float64, float64) {
     variance = variance / float64(len(records))
 
     return average, variance
+}package main
+
+import (
+	"regexp"
+	"strings"
+)
+
+type UserData struct {
+	Username string
+	Email    string
+	Comments string
+}
+
+func SanitizeInput(input string) string {
+	// Remove leading/trailing whitespace
+	trimmed := strings.TrimSpace(input)
+	// Escape HTML special characters
+	replacer := strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		"\"", "&quot;",
+		"'", "&#39;",
+	)
+	return replacer.Replace(trimmed)
+}
+
+func ValidateEmail(email string) bool {
+	pattern := `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`
+	matched, _ := regexp.MatchString(pattern, email)
+	return matched
+}
+
+func ProcessUserData(data UserData) (UserData, error) {
+	// Sanitize all string fields
+	data.Username = SanitizeInput(data.Username)
+	data.Email = SanitizeInput(data.Email)
+	data.Comments = SanitizeInput(data.Comments)
+
+	// Validate email format
+	if !ValidateEmail(data.Email) {
+		return data, &ValidationError{Field: "email", Message: "invalid email format"}
+	}
+
+	// Additional business logic can be added here
+	return data, nil
+}
+
+type ValidationError struct {
+	Field   string
+	Message string
+}
+
+func (e *ValidationError) Error() string {
+	return e.Field + ": " + e.Message
 }
