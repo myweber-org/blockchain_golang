@@ -235,3 +235,91 @@ func ProcessCSVData(inputPath, outputPath string) error {
 
 	return WriteProcessedData(outputPath, records)
 }
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"regexp"
+	"strings"
+)
+
+type UserProfile struct {
+	ID        int    `json:"id"`
+	Username  string `json:"username"`
+	Email     string `json:"email"`
+	Age       int    `json:"age"`
+	Active    bool   `json:"active"`
+	Biography string `json:"biography,omitempty"`
+}
+
+func ValidateUserProfile(profile UserProfile) error {
+	if profile.ID <= 0 {
+		return fmt.Errorf("invalid user ID: %d", profile.ID)
+	}
+
+	if len(profile.Username) < 3 || len(profile.Username) > 20 {
+		return fmt.Errorf("username must be between 3 and 20 characters")
+	}
+
+	emailRegex := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+	if !emailRegex.MatchString(profile.Email) {
+		return fmt.Errorf("invalid email format: %s", profile.Email)
+	}
+
+	if profile.Age < 0 || profile.Age > 150 {
+		return fmt.Errorf("age must be between 0 and 150")
+	}
+
+	return nil
+}
+
+func TransformUserProfile(profile *UserProfile) {
+	profile.Username = strings.TrimSpace(profile.Username)
+	profile.Email = strings.ToLower(strings.TrimSpace(profile.Email))
+	profile.Biography = strings.TrimSpace(profile.Biography)
+
+	if len(profile.Biography) > 500 {
+		profile.Biography = profile.Biography[:500] + "..."
+	}
+}
+
+func ProcessUserProfile(data []byte) ([]byte, error) {
+	var profile UserProfile
+	if err := json.Unmarshal(data, &profile); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal user profile: %w", err)
+	}
+
+	if err := ValidateUserProfile(profile); err != nil {
+		return nil, fmt.Errorf("validation failed: %w", err)
+	}
+
+	TransformUserProfile(&profile)
+
+	processedData, err := json.MarshalIndent(profile, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal processed profile: %w", err)
+	}
+
+	return processedData, nil
+}
+
+func main() {
+	jsonData := []byte(`{
+		"id": 123,
+		"username": "  JohnDoe  ",
+		"email": "JOHN@EXAMPLE.COM",
+		"age": 30,
+		"active": true,
+		"biography": "This is a very long biography that exceeds the maximum allowed length. It contains many details about the user's life, interests, and professional background. We need to ensure it gets properly truncated during processing to maintain data consistency across our systems."
+	}`)
+
+	result, err := ProcessUserProfile(jsonData)
+	if err != nil {
+		fmt.Printf("Error processing profile: %v\n", err)
+		return
+	}
+
+	fmt.Println("Processed user profile:")
+	fmt.Println(string(result))
+}
