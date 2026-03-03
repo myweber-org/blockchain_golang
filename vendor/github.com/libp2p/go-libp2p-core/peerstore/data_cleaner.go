@@ -261,4 +261,123 @@ func main() {
 	}
 
 	fmt.Printf("Successfully cleaned data. Output saved to %s\n", outputFile)
+}package main
+
+import (
+    "encoding/csv"
+    "fmt"
+    "io"
+    "os"
+    "strconv"
+    "strings"
+)
+
+type DataRecord struct {
+    ID      int
+    Name    string
+    Email   string
+    Age     int
+    Active  bool
+}
+
+func CleanCSVFile(inputPath, outputPath string) error {
+    inputFile, err := os.Open(inputPath)
+    if err != nil {
+        return fmt.Errorf("failed to open input file: %w", err)
+    }
+    defer inputFile.Close()
+
+    outputFile, err := os.Create(outputPath)
+    if err != nil {
+        return fmt.Errorf("failed to create output file: %w", err)
+    }
+    defer outputFile.Close()
+
+    reader := csv.NewReader(inputFile)
+    writer := csv.NewWriter(outputFile)
+    defer writer.Flush()
+
+    headers, err := reader.Read()
+    if err != nil {
+        return fmt.Errorf("failed to read headers: %w", err)
+    }
+
+    if err := writer.Write(headers); err != nil {
+        return fmt.Errorf("failed to write headers: %w", err)
+    }
+
+    for {
+        record, err := reader.Read()
+        if err == io.EOF {
+            break
+        }
+        if err != nil {
+            continue
+        }
+
+        cleanedRecord, valid := validateAndCleanRecord(record)
+        if valid {
+            if err := writer.Write(cleanedRecord); err != nil {
+                return fmt.Errorf("failed to write record: %w", err)
+            }
+        }
+    }
+
+    return nil
+}
+
+func validateAndCleanRecord(record []string) ([]string, bool) {
+    if len(record) != 5 {
+        return nil, false
+    }
+
+    id, err := strconv.Atoi(strings.TrimSpace(record[0]))
+    if err != nil || id <= 0 {
+        return nil, false
+    }
+
+    name := strings.TrimSpace(record[1])
+    if name == "" {
+        return nil, false
+    }
+
+    email := strings.TrimSpace(record[2])
+    if !strings.Contains(email, "@") || !strings.Contains(email, ".") {
+        return nil, false
+    }
+
+    age, err := strconv.Atoi(strings.TrimSpace(record[3]))
+    if err != nil || age < 0 || age > 120 {
+        return nil, false
+    }
+
+    active := strings.ToLower(strings.TrimSpace(record[4]))
+    if active != "true" && active != "false" {
+        return nil, false
+    }
+
+    return []string{
+        strconv.Itoa(id),
+        name,
+        strings.ToLower(email),
+        strconv.Itoa(age),
+        active,
+    }, true
+}
+
+func main() {
+    if len(os.Args) != 3 {
+        fmt.Println("Usage: go run data_cleaner.go <input.csv> <output.csv>")
+        os.Exit(1)
+    }
+
+    inputFile := os.Args[1]
+    outputFile := os.Args[2]
+
+    if err := CleanCSVFile(inputFile, outputFile); err != nil {
+        fmt.Printf("Error cleaning data: %v\n", err)
+        os.Exit(1)
+    }
+
+    fmt.Printf("Data cleaned successfully. Output written to %s\n", outputFile)
 }
