@@ -88,4 +88,81 @@ func main() {
         os.Exit(1)
     }
     fmt.Printf("Decrypted text: %s\n", string(decrypted))
+}package main
+
+import (
+    "crypto/aes"
+    "crypto/cipher"
+    "crypto/rand"
+    "encoding/base64"
+    "errors"
+    "fmt"
+    "io"
+    "os"
+)
+
+func encryptData(plaintext []byte, key []byte) ([]byte, error) {
+    block, err := aes.NewCipher(key)
+    if err != nil {
+        return nil, err
+    }
+
+    ciphertext := make([]byte, aes.BlockSize+len(plaintext))
+    iv := ciphertext[:aes.BlockSize]
+    if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+        return nil, err
+    }
+
+    stream := cipher.NewCFBEncrypter(block, iv)
+    stream.XORKeyStream(ciphertext[aes.BlockSize:], plaintext)
+
+    return ciphertext, nil
+}
+
+func decryptData(ciphertext []byte, key []byte) ([]byte, error) {
+    block, err := aes.NewCipher(key)
+    if err != nil {
+        return nil, err
+    }
+
+    if len(ciphertext) < aes.BlockSize {
+        return nil, errors.New("ciphertext too short")
+    }
+
+    iv := ciphertext[:aes.BlockSize]
+    ciphertext = ciphertext[aes.BlockSize:]
+
+    stream := cipher.NewCFBDecrypter(block, iv)
+    stream.XORKeyStream(ciphertext, ciphertext)
+
+    return ciphertext, nil
+}
+
+func main() {
+    key := make([]byte, 32)
+    if _, err := rand.Read(key); err != nil {
+        fmt.Println("Error generating key:", err)
+        return
+    }
+
+    secretMessage := "This is a confidential message"
+    fmt.Println("Original:", secretMessage)
+
+    encrypted, err := encryptData([]byte(secretMessage), key)
+    if err != nil {
+        fmt.Println("Encryption error:", err)
+        return
+    }
+
+    encoded := base64.StdEncoding.EncodeToString(encrypted)
+    fmt.Println("Encrypted (base64):", encoded)
+
+    decoded, _ := base64.StdEncoding.DecodeString(encoded)
+    decrypted, err := decryptData(decoded, key)
+    if err != nil {
+        fmt.Println("Decryption error:", err)
+        return
+    }
+
+    fmt.Println("Decrypted:", string(decrypted))
 }
