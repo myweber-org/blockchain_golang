@@ -3,56 +3,35 @@ package middleware
 import (
 	"log"
 	"net/http"
-	"sync"
 	"time"
 )
 
 type ActivityLogger struct {
-	mu          sync.RWMutex
-	userLimits  map[string]time.Time
-	rateLimit   time.Duration
+	Logger *log.Logger
 }
 
-func NewActivityLogger(limit time.Duration) *ActivityLogger {
-	return &ActivityLogger{
-		userLimits: make(map[string]time.Time),
-		rateLimit:  limit,
-	}
+func NewActivityLogger(logger *log.Logger) *ActivityLogger {
+	return &ActivityLogger{Logger: logger}
 }
 
-func (al *ActivityLogger) Middleware(next http.Handler) http.Handler {
+func (al *ActivityLogger) LogActivity(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID := r.Header.Get("X-User-ID")
-		if userID == "" {
-			userID = "anonymous"
-		}
+		start := time.Now()
+		userAgent := r.UserAgent()
+		clientIP := r.RemoteAddr
+		method := r.Method
+		path := r.URL.Path
 
-		if !al.checkRateLimit(userID) {
-			http.Error(w, "Too many requests", http.StatusTooManyRequests)
-			return
-		}
-
-		al.logActivity(userID, r.Method, r.URL.Path)
 		next.ServeHTTP(w, r)
+
+		duration := time.Since(start)
+		al.Logger.Printf(
+			"Activity: %s %s | IP: %s | Agent: %s | Duration: %v",
+			method,
+			path,
+			clientIP,
+			userAgent,
+			duration,
+		)
 	})
-}
-
-func (al *ActivityLogger) checkRateLimit(userID string) bool {
-	al.mu.Lock()
-	defer al.mu.Unlock()
-
-	lastTime, exists := al.userLimits[userID]
-	now := time.Now()
-
-	if exists && now.Sub(lastTime) < al.rateLimit {
-		return false
-	}
-
-	al.userLimits[userID] = now
-	return true
-}
-
-func (al *ActivityLogger) logActivity(userID, method, path string) {
-	log.Printf("Activity: user=%s method=%s path=%s time=%s",
-		userID, method, path, time.Now().Format(time.RFC3339))
 }
