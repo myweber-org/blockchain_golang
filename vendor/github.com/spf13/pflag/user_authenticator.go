@@ -3,6 +3,8 @@ package auth
 import (
     "net/http"
     "strings"
+    "time"
+
     "github.com/golang-jwt/jwt/v5"
 )
 
@@ -12,13 +14,27 @@ type Claims struct {
     jwt.RegisteredClaims
 }
 
-var jwtKey = []byte("your-secret-key")
+var jwtKey = []byte("your_secret_key_here")
 
-func Authenticate(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func GenerateToken(username, role string) (string, error) {
+    expirationTime := time.Now().Add(24 * time.Hour)
+    claims := &Claims{
+        Username: username,
+        Role:     role,
+        RegisteredClaims: jwt.RegisteredClaims{
+            ExpiresAt: jwt.NewNumericDate(expirationTime),
+        },
+    }
+
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    return token.SignedString(jwtKey)
+}
+
+func Authenticate(next http.HandlerFunc) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
         authHeader := r.Header.Get("Authorization")
         if authHeader == "" {
-            http.Error(w, "Authorization header required", http.StatusUnauthorized)
+            http.Error(w, "Authorization header missing", http.StatusUnauthorized)
             return
         }
 
@@ -34,8 +50,6 @@ func Authenticate(next http.Handler) http.Handler {
             return
         }
 
-        r.Header.Set("X-Username", claims.Username)
-        r.Header.Set("X-Role", claims.Role)
         next.ServeHTTP(w, r)
-    })
+    }
 }
