@@ -71,4 +71,42 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 func GetUserID(ctx context.Context) (string, bool) {
 	userID, ok := ctx.Value(UserIDKey).(string)
 	return userID, ok
+}package middleware
+
+import (
+	"net/http"
+	"strings"
+)
+
+type UserAuthenticator struct {
+	jwtSecret []byte
+}
+
+func NewUserAuthenticator(secret string) *UserAuthenticator {
+	return &UserAuthenticator{jwtSecret: []byte(secret)}
+}
+
+func (ua *UserAuthenticator) Authenticate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "Authorization header required", http.StatusUnauthorized)
+			return
+		}
+
+		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		if tokenString == authHeader {
+			http.Error(w, "Bearer token required", http.StatusUnauthorized)
+			return
+		}
+
+		claims, err := validateJWT(tokenString, ua.jwtSecret)
+		if err != nil {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+
+		ctx := setUserContext(r.Context(), claims.UserID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
