@@ -1,116 +1,62 @@
 
 package main
 
-import "fmt"
-
-func RemoveDuplicates(nums []int) []int {
-    seen := make(map[int]bool)
-    result := []int{}
-    
-    for _, num := range nums {
-        if !seen[num] {
-            seen[num] = true
-            result = append(result, num)
-        }
-    }
-    
-    return result
-}
-
-func main() {
-    data := []int{1, 2, 2, 3, 4, 4, 5, 1, 6}
-    cleaned := RemoveDuplicates(data)
-    fmt.Printf("Original: %v\n", data)
-    fmt.Printf("Cleaned: %v\n", cleaned)
-}
-package main
-
 import (
+	"encoding/csv"
 	"fmt"
-	"strings"
+	"os"
 )
 
-type DataCleaner struct {
-	Data []string
-}
-
-func NewDataCleaner(data []string) *DataCleaner {
-	return &DataCleaner{Data: data}
-}
-
-func (dc *DataCleaner) RemoveDuplicates() []string {
-	seen := make(map[string]struct{})
-	result := []string{}
-	for _, item := range dc.Data {
-		if _, exists := seen[item]; !exists {
-			seen[item] = struct{}{}
-			result = append(result, item)
-		}
+func removeDuplicates(inputFile, outputFile string) error {
+	inFile, err := os.Open(inputFile)
+	if err != nil {
+		return fmt.Errorf("failed to open input file: %w", err)
 	}
-	return result
-}
+	defer inFile.Close()
 
-func (dc *DataCleaner) TrimWhitespace() []string {
-	result := make([]string, len(dc.Data))
-	for i, item := range dc.Data {
-		result[i] = strings.TrimSpace(item)
+	reader := csv.NewReader(inFile)
+	records, err := reader.ReadAll()
+	if err != nil {
+		return fmt.Errorf("failed to read CSV: %w", err)
 	}
-	return result
-}
 
-func main() {
-	rawData := []string{"  apple  ", "banana", "  apple  ", " cherry", "banana "}
-	cleaner := NewDataCleaner(rawData)
-
-	trimmed := cleaner.TrimWhitespace()
-	cleaner.Data = trimmed
-	unique := cleaner.RemoveDuplicates()
-
-	fmt.Println("Original:", rawData)
-	fmt.Println("Cleaned:", unique)
-}package main
-
-import (
-	"fmt"
-	"strings"
-)
-
-type DataCleaner struct {
-	items []string
-}
-
-func NewDataCleaner(data []string) *DataCleaner {
-	return &DataCleaner{items: data}
-}
-
-func (dc *DataCleaner) RemoveDuplicates() {
 	seen := make(map[string]bool)
-	var result []string
-	for _, item := range dc.items {
-		if !seen[item] {
-			seen[item] = true
-			result = append(result, item)
+	var uniqueRecords [][]string
+
+	for _, record := range records {
+		if len(record) == 0 {
+			continue
+		}
+		key := record[0]
+		if !seen[key] {
+			seen[key] = true
+			uniqueRecords = append(uniqueRecords, record)
 		}
 	}
-	dc.items = result
-}
 
-func (dc *DataCleaner) TrimWhitespace() {
-	for i, item := range dc.items {
-		dc.items[i] = strings.TrimSpace(item)
+	outFile, err := os.Create(outputFile)
+	if err != nil {
+		return fmt.Errorf("failed to create output file: %w", err)
 	}
-}
+	defer outFile.Close()
 
-func (dc *DataCleaner) GetData() []string {
-	return dc.items
+	writer := csv.NewWriter(outFile)
+	defer writer.Flush()
+
+	return writer.WriteAll(uniqueRecords)
 }
 
 func main() {
-	rawData := []string{"apple ", " banana", "apple", " cherry ", "banana"}
-	cleaner := NewDataCleaner(rawData)
-	
-	cleaner.TrimWhitespace()
-	cleaner.RemoveDuplicates()
-	
-	fmt.Println("Cleaned data:", cleaner.GetData())
+	if len(os.Args) != 3 {
+		fmt.Println("Usage: data_cleaner <input.csv> <output.csv>")
+		os.Exit(1)
+	}
+
+	err := removeDuplicates(os.Args[1], os.Args[2])
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Duplicate removal completed successfully")
 }
