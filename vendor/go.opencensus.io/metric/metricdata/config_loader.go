@@ -154,3 +154,55 @@ func overrideBool(field *bool, envVar string) {
         *field = val == "true" || val == "1" || val == "yes"
     }
 }
+package config
+
+import (
+	"errors"
+	"os"
+	"strconv"
+	"strings"
+)
+
+type AppConfig struct {
+	ServerPort int
+	DebugMode  bool
+	DatabaseURL string
+	CacheTTL   int
+}
+
+func LoadConfig() (*AppConfig, error) {
+	cfg := &AppConfig{}
+
+	portStr := getEnvWithDefault("SERVER_PORT", "8080")
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return nil, errors.New("invalid SERVER_PORT value")
+	}
+	cfg.ServerPort = port
+
+	debugStr := getEnvWithDefault("DEBUG_MODE", "false")
+	cfg.DebugMode = strings.ToLower(debugStr) == "true"
+
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		return nil, errors.New("DATABASE_URL is required")
+	}
+	cfg.DatabaseURL = dbURL
+
+	ttlStr := getEnvWithDefault("CACHE_TTL", "300")
+	ttl, err := strconv.Atoi(ttlStr)
+	if err != nil {
+		return nil, errors.New("invalid CACHE_TTL value")
+	}
+	cfg.CacheTTL = ttl
+
+	return cfg, nil
+}
+
+func getEnvWithDefault(key, defaultValue string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	return value
+}
