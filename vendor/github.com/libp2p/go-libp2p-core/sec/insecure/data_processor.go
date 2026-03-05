@@ -210,3 +210,65 @@ func main() {
 	fmt.Printf("Average value: %.2f\n", avg)
 	fmt.Printf("Maximum value: %.2f\n", max)
 }
+package data
+
+import (
+	"errors"
+	"regexp"
+	"strings"
+	"time"
+)
+
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+
+type UserData struct {
+	ID        int
+	Email     string
+	Username  string
+	CreatedAt time.Time
+	Active    bool
+}
+
+func ValidateEmail(email string) error {
+	if !emailRegex.MatchString(email) {
+		return errors.New("invalid email format")
+	}
+	return nil
+}
+
+func NormalizeUsername(username string) string {
+	return strings.ToLower(strings.TrimSpace(username))
+}
+
+func ProcessUserData(user UserData) (UserData, error) {
+	if err := ValidateEmail(user.Email); err != nil {
+		return UserData{}, err
+	}
+
+	user.Username = NormalizeUsername(user.Username)
+	user.CreatedAt = time.Now().UTC()
+
+	if user.ID <= 0 {
+		return UserData{}, errors.New("invalid user ID")
+	}
+
+	return user, nil
+}
+
+func FilterActiveUsers(users []UserData) []UserData {
+	var activeUsers []UserData
+	for _, user := range users {
+		if user.Active {
+			activeUsers = append(activeUsers, user)
+		}
+	}
+	return activeUsers
+}
+
+func GenerateUserReport(users []UserData) map[string]int {
+	report := make(map[string]int)
+	report["total_users"] = len(users)
+	report["active_users"] = len(FilterActiveUsers(users))
+	report["inactive_users"] = report["total_users"] - report["active_users"]
+	return report
+}
