@@ -120,4 +120,155 @@ func main() {
 		fmt.Println("Invalid operation. Use 'encrypt' or 'decrypt'.")
 		os.Exit(1)
 	}
+}package main
+
+import (
+    "crypto/aes"
+    "crypto/cipher"
+    "crypto/rand"
+    "encoding/base64"
+    "errors"
+    "fmt"
+    "io"
+    "os"
+)
+
+func encryptData(plaintext []byte, key []byte) ([]byte, error) {
+    block, err := aes.NewCipher(key)
+    if err != nil {
+        return nil, err
+    }
+
+    ciphertext := make([]byte, aes.BlockSize+len(plaintext))
+    iv := ciphertext[:aes.BlockSize]
+    if _, err := io.ReadFull(rand.Reader, iv); err != nil {
+        return nil, err
+    }
+
+    stream := cipher.NewCFBEncrypter(block, iv)
+    stream.XORKeyStream(ciphertext[aes.BlockSize:], plaintext)
+
+    return ciphertext, nil
+}
+
+func decryptData(ciphertext []byte, key []byte) ([]byte, error) {
+    block, err := aes.NewCipher(key)
+    if err != nil {
+        return nil, err
+    }
+
+    if len(ciphertext) < aes.BlockSize {
+        return nil, errors.New("ciphertext too short")
+    }
+
+    iv := ciphertext[:aes.BlockSize]
+    ciphertext = ciphertext[aes.BlockSize:]
+
+    stream := cipher.NewCFBDecrypter(block, iv)
+    stream.XORKeyStream(ciphertext, ciphertext)
+
+    return ciphertext, nil
+}
+
+func generateKey() ([]byte, error) {
+    key := make([]byte, 32)
+    if _, err := rand.Read(key); err != nil {
+        return nil, err
+    }
+    return key, nil
+}
+
+func main() {
+    if len(os.Args) < 2 {
+        fmt.Println("Usage: go run file_encryptor.go <command>")
+        fmt.Println("Commands: encrypt, decrypt, genkey")
+        return
+    }
+
+    command := os.Args[1]
+
+    switch command {
+    case "encrypt":
+        if len(os.Args) != 4 {
+            fmt.Println("Usage: go run file_encryptor.go encrypt <input_file> <key_base64>")
+            return
+        }
+
+        inputFile := os.Args[2]
+        keyBase64 := os.Args[3]
+
+        key, err := base64.StdEncoding.DecodeString(keyBase64)
+        if err != nil {
+            fmt.Printf("Error decoding key: %v\n", err)
+            return
+        }
+
+        data, err := os.ReadFile(inputFile)
+        if err != nil {
+            fmt.Printf("Error reading file: %v\n", err)
+            return
+        }
+
+        encrypted, err := encryptData(data, key)
+        if err != nil {
+            fmt.Printf("Error encrypting: %v\n", err)
+            return
+        }
+
+        outputFile := inputFile + ".enc"
+        if err := os.WriteFile(outputFile, encrypted, 0644); err != nil {
+            fmt.Printf("Error writing file: %v\n", err)
+            return
+        }
+
+        fmt.Printf("Encrypted file saved as: %s\n", outputFile)
+
+    case "decrypt":
+        if len(os.Args) != 4 {
+            fmt.Println("Usage: go run file_encryptor.go decrypt <input_file> <key_base64>")
+            return
+        }
+
+        inputFile := os.Args[2]
+        keyBase64 := os.Args[3]
+
+        key, err := base64.StdEncoding.DecodeString(keyBase64)
+        if err != nil {
+            fmt.Printf("Error decoding key: %v\n", err)
+            return
+        }
+
+        data, err := os.ReadFile(inputFile)
+        if err != nil {
+            fmt.Printf("Error reading file: %v\n", err)
+            return
+        }
+
+        decrypted, err := decryptData(data, key)
+        if err != nil {
+            fmt.Printf("Error decrypting: %v\n", err)
+            return
+        }
+
+        outputFile := inputFile + ".dec"
+        if err := os.WriteFile(outputFile, decrypted, 0644); err != nil {
+            fmt.Printf("Error writing file: %v\n", err)
+            return
+        }
+
+        fmt.Printf("Decrypted file saved as: %s\n", outputFile)
+
+    case "genkey":
+        key, err := generateKey()
+        if err != nil {
+            fmt.Printf("Error generating key: %v\n", err)
+            return
+        }
+
+        keyBase64 := base64.StdEncoding.EncodeToString(key)
+        fmt.Printf("Generated key: %s\n", keyBase64)
+
+    default:
+        fmt.Println("Unknown command. Available commands: encrypt, decrypt, genkey")
+    }
 }
