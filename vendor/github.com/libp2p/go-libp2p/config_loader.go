@@ -236,4 +236,156 @@ func validateConfig(config *AppConfig) error {
 	}
 
 	return nil
+}package config
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+)
+
+type DatabaseConfig struct {
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Database string `json:"database"`
+}
+
+type ServerConfig struct {
+	Port         int    `json:"port"`
+	ReadTimeout  int    `json:"read_timeout"`
+	WriteTimeout int    `json:"write_timeout"`
+	DebugMode    bool   `json:"debug_mode"`
+	LogLevel     string `json:"log_level"`
+}
+
+type AppConfig struct {
+	Database DatabaseConfig `json:"database"`
+	Server   ServerConfig   `json:"server"`
+	Features []string       `json:"features"`
+}
+
+func LoadConfig(configPath string) (*AppConfig, error) {
+	fileData, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	var config AppConfig
+	if err := json.Unmarshal(fileData, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse config JSON: %w", err)
+	}
+
+	if err := overrideFromEnv(&config); err != nil {
+		return nil, fmt.Errorf("failed to process environment variables: %w", err)
+	}
+
+	if err := validateConfig(&config); err != nil {
+		return nil, fmt.Errorf("config validation failed: %w", err)
+	}
+
+	return &config, nil
+}
+
+func overrideFromEnv(config *AppConfig) error {
+	if val := os.Getenv("DB_HOST"); val != "" {
+		config.Database.Host = val
+	}
+	if val := os.Getenv("DB_PORT"); val != "" {
+		port, err := strconv.Atoi(val)
+		if err != nil {
+			return fmt.Errorf("invalid DB_PORT value: %s", val)
+		}
+		config.Database.Port = port
+	}
+	if val := os.Getenv("DB_USER"); val != "" {
+		config.Database.Username = val
+	}
+	if val := os.Getenv("DB_PASS"); val != "" {
+		config.Database.Password = val
+	}
+	if val := os.Getenv("DB_NAME"); val != "" {
+		config.Database.Database = val
+	}
+
+	if val := os.Getenv("SERVER_PORT"); val != "" {
+		port, err := strconv.Atoi(val)
+		if err != nil {
+			return fmt.Errorf("invalid SERVER_PORT value: %s", val)
+		}
+		config.Server.Port = port
+	}
+	if val := os.Getenv("DEBUG_MODE"); val != "" {
+		debug, err := strconv.ParseBool(val)
+		if err != nil {
+			return fmt.Errorf("invalid DEBUG_MODE value: %s", val)
+		}
+		config.Server.DebugMode = debug
+	}
+	if val := os.Getenv("LOG_LEVEL"); val != "" {
+		config.Server.LogLevel = strings.ToUpper(val)
+	}
+
+	if val := os.Getenv("ENABLED_FEATURES"); val != "" {
+		config.Features = strings.Split(val, ",")
+	}
+
+	return nil
+}
+
+func validateConfig(config *AppConfig) error {
+	if config.Database.Host == "" {
+		return errors.New("database host is required")
+	}
+	if config.Database.Port <= 0 || config.Database.Port > 65535 {
+		return errors.New("database port must be between 1 and 65535")
+	}
+	if config.Database.Username == "" {
+		return errors.New("database username is required")
+	}
+	if config.Database.Database == "" {
+		return errors.New("database name is required")
+	}
+
+	if config.Server.Port <= 0 || config.Server.Port > 65535 {
+		return errors.New("server port must be between 1 and 65535")
+	}
+	if config.Server.ReadTimeout < 0 {
+		return errors.New("read timeout cannot be negative")
+	}
+	if config.Server.WriteTimeout < 0 {
+		return errors.New("write timeout cannot be negative")
+	}
+
+	validLogLevels := map[string]bool{
+		"DEBUG": true, "INFO": true, "WARN": true, "ERROR": true, "FATAL": true,
+	}
+	if !validLogLevels[config.Server.LogLevel] {
+		return fmt.Errorf("invalid log level: %s", config.Server.LogLevel)
+	}
+
+	return nil
+}
+
+func (c *AppConfig) GetDatabaseDSN() string {
+	return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s",
+		c.Database.Username,
+		c.Database.Password,
+		c.Database.Host,
+		c.Database.Port,
+		c.Database.Database,
+	)
+}
+
+func (c *AppConfig) IsFeatureEnabled(feature string) bool {
+	for _, f := range c.Features {
+		if strings.EqualFold(f, feature) {
+			return true
+		}
+	}
+	return false
 }
