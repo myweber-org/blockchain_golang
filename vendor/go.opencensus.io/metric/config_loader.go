@@ -1,67 +1,59 @@
 package config
 
 import (
+    "fmt"
     "os"
     "strconv"
     "strings"
 )
 
-type Config struct {
+type AppConfig struct {
     ServerPort int
     DatabaseURL string
-    EnableDebug bool
-    AllowedOrigins []string
+    CacheEnabled bool
+    MaxConnections int
+    LogLevel string
 }
 
-func Load() (*Config, error) {
-    cfg := &Config{}
+func LoadConfig() (*AppConfig, error) {
+    cfg := &AppConfig{}
     
-    portStr := getEnv("SERVER_PORT", "8080")
+    portStr := getEnvOrDefault("SERVER_PORT", "8080")
     port, err := strconv.Atoi(portStr)
     if err != nil {
-        return nil, err
+        return nil, fmt.Errorf("invalid SERVER_PORT value: %v", err)
     }
     cfg.ServerPort = port
     
-    cfg.DatabaseURL = getEnv("DATABASE_URL", "postgres://localhost:5432/app")
+    cfg.DatabaseURL = getEnvOrDefault("DATABASE_URL", "postgres://localhost:5432/appdb")
     
-    debugStr := getEnv("ENABLE_DEBUG", "false")
-    cfg.EnableDebug = strings.ToLower(debugStr) == "true"
+    cacheEnabledStr := getEnvOrDefault("CACHE_ENABLED", "true")
+    cacheEnabled, err := strconv.ParseBool(cacheEnabledStr)
+    if err != nil {
+        return nil, fmt.Errorf("invalid CACHE_ENABLED value: %v", err)
+    }
+    cfg.CacheEnabled = cacheEnabled
     
-    originsStr := getEnv("ALLOWED_ORIGINS", "http://localhost:3000")
-    cfg.AllowedOrigins = strings.Split(originsStr, ",")
+    maxConnStr := getEnvOrDefault("MAX_CONNECTIONS", "100")
+    maxConn, err := strconv.Atoi(maxConnStr)
+    if err != nil {
+        return nil, fmt.Errorf("invalid MAX_CONNECTIONS value: %v", err)
+    }
+    cfg.MaxConnections = maxConn
     
-    if err := validateConfig(cfg); err != nil {
-        return nil, err
+    cfg.LogLevel = strings.ToLower(getEnvOrDefault("LOG_LEVEL", "info"))
+    validLogLevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
+    if !validLogLevels[cfg.LogLevel] {
+        return nil, fmt.Errorf("invalid LOG_LEVEL value: %s", cfg.LogLevel)
     }
     
     return cfg, nil
 }
 
-func getEnv(key, defaultValue string) string {
-    if value := os.Getenv(key); value != "" {
-        return value
+func getEnvOrDefault(key, defaultValue string) string {
+    value := os.Getenv(key)
+    if value == "" {
+        return defaultValue
     }
-    return defaultValue
-}
-
-func validateConfig(cfg *Config) error {
-    if cfg.ServerPort < 1 || cfg.ServerPort > 65535 {
-        return &ConfigError{Field: "ServerPort", Message: "port must be between 1 and 65535"}
-    }
-    
-    if cfg.DatabaseURL == "" {
-        return &ConfigError{Field: "DatabaseURL", Message: "database URL cannot be empty"}
-    }
-    
-    return nil
-}
-
-type ConfigError struct {
-    Field   string
-    Message string
-}
-
-func (e *ConfigError) Error() string {
-    return "config error: " + e.Field + " - " + e.Message
+    return value
 }
