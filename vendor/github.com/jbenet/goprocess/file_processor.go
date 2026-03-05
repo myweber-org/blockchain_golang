@@ -122,4 +122,168 @@ func main() {
 
 	total, valid = processor.GetStats()
 	fmt.Printf("Final stats: %d total records, %d valid\n", total, valid)
+}package main
+
+import (
+	"bufio"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+)
+
+type FileProcessor struct {
+	workers   int
+	batchSize int
+	mu        sync.Mutex
+	results   []ProcessResult
+}
+
+type ProcessResult struct {
+	Filename string
+	Lines    int
+	Size     int64
+	Duration time.Duration
+	Error    error
+}
+
+func NewFileProcessor(workers, batchSize int) *FileProcessor {
+	if workers < 1 {
+		workers = 1
+	}
+	if batchSize < 1 {
+		batchSize = 10
+	}
+	return &FileProcessor{
+		workers:   workers,
+		batchSize: batchSize,
+		results:   make([]ProcessResult, 0),
+	}
+}
+
+func (fp *FileProcessor) ProcessFiles(paths []string) []ProcessResult {
+	var wg sync.WaitGroup
+	fileChan := make(chan string, len(paths))
+
+	for i := 0; i < fp.workers; i++ {
+		wg.Add(1)
+		go fp.worker(fileChan, &wg)
+	}
+
+	for _, path := range paths {
+		fileChan <- path
+	}
+	close(fileChan)
+
+	wg.Wait()
+	return fp.results
+}
+
+func (fp *FileProcessor) worker(files <-chan string, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	for file := range files {
+		result := fp.processSingleFile(file)
+		fp.mu.Lock()
+		fp.results = append(fp.results, result)
+		fp.mu.Unlock()
+	}
+}
+
+func (fp *FileProcessor) processSingleFile(path string) ProcessResult {
+	start := time.Now()
+	info, err := os.Stat(path)
+	if err != nil {
+		return ProcessResult{
+			Filename: path,
+			Error:    err,
+			Duration: time.Since(start),
+		}
+	}
+
+	if info.IsDir() {
+		return ProcessResult{
+			Filename: path,
+			Error:    errors.New("path is directory"),
+			Duration: time.Since(start),
+		}
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return ProcessResult{
+			Filename: path,
+			Error:    err,
+			Duration: time.Since(start),
+		}
+	}
+	defer file.Close()
+
+	lineCount := 0
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		lineCount++
+	}
+
+	if err := scanner.Err(); err != nil {
+		return ProcessResult{
+			Filename: path,
+			Lines:    lineCount,
+			Size:     info.Size(),
+			Error:    err,
+			Duration: time.Since(start),
+		}
+	}
+
+	return ProcessResult{
+		Filename: path,
+		Lines:    lineCount,
+		Size:     info.Size(),
+		Duration: time.Since(start),
+	}
+}
+
+func findFilesByPattern(pattern string) ([]string, error) {
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return nil, err
+	}
+	if len(matches) == 0 {
+		return nil, errors.New("no files match pattern")
+	}
+	return matches, nil
+}
+
+func main() {
+	files, err := findFilesByPattern("*.txt")
+	if err != nil {
+		fmt.Printf("Error finding files: %v\n", err)
+		return
+	}
+
+	processor := NewFileProcessor(4, 20)
+	results := processor.ProcessFiles(files)
+
+	totalLines := 0
+	var totalSize int64 = 0
+	var totalDuration time.Duration
+
+	fmt.Println("Processing Results:")
+	for _, result := range results {
+		if result.Error != nil {
+			fmt.Printf("  %s: ERROR - %v\n", result.Filename, result.Error)
+			continue
+		}
+		fmt.Printf("  %s: %d lines, %d bytes, %v\n",
+			result.Filename, result.Lines, result.Size, result.Duration)
+		totalLines += result.Lines
+		totalSize += result.Size
+		totalDuration += result.Duration
+	}
+
+	fmt.Printf("\nSummary: %d files, %d total lines, %d total bytes, %v total time\n",
+		len(results), totalLines, totalSize, totalDuration)
 }
