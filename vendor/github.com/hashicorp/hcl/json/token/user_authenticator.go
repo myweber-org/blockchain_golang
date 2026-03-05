@@ -3,13 +3,13 @@ package middleware
 import (
     "net/http"
     "strings"
-    "github.com/golang-jwt/jwt/v4"
+    "github.com/dgrijalva/jwt-go"
 )
 
 type Claims struct {
-    UserID string `json:"user_id"`
-    Role   string `json:"role"`
-    jwt.RegisteredClaims
+    Username string `json:"username"`
+    Role     string `json:"role"`
+    jwt.StandardClaims
 }
 
 func Authenticate(next http.Handler) http.Handler {
@@ -20,16 +20,16 @@ func Authenticate(next http.Handler) http.Handler {
             return
         }
 
-        tokenParts := strings.Split(authHeader, " ")
-        if len(tokenParts) != 2 || tokenParts[0] != "Bearer" {
+        parts := strings.Split(authHeader, " ")
+        if len(parts) != 2 || parts[0] != "Bearer" {
             http.Error(w, "Invalid authorization format", http.StatusUnauthorized)
             return
         }
 
-        tokenStr := tokenParts[1]
+        tokenString := parts[1]
         claims := &Claims{}
 
-        token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
+        token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
             return []byte("your-secret-key"), nil
         })
 
@@ -38,9 +38,8 @@ func Authenticate(next http.Handler) http.Handler {
             return
         }
 
-        r.Header.Set("X-User-ID", claims.UserID)
-        r.Header.Set("X-User-Role", claims.Role)
-
+        r.Header.Set("X-Username", claims.Username)
+        r.Header.Set("X-Role", claims.Role)
         next.ServeHTTP(w, r)
     })
 }
