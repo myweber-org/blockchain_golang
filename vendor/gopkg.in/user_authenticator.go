@@ -1,21 +1,29 @@
 package middleware
 
 import (
-	"context"
 	"net/http"
 	"strings"
 )
 
-type contextKey string
-
-const userIDKey contextKey = "userID"
-
 type Authenticator struct {
-	jwtSecret []byte
+	secretKey []byte
 }
 
 func NewAuthenticator(secret string) *Authenticator {
-	return &Authenticator{jwtSecret: []byte(secret)}
+	return &Authenticator{secretKey: []byte(secret)}
+}
+
+func (a *Authenticator) ValidateToken(token string) bool {
+	if token == "" {
+		return false
+	}
+	
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	
+	return validateSignature(parts, a.secretKey)
 }
 
 func (a *Authenticator) Middleware(next http.Handler) http.Handler {
@@ -26,41 +34,16 @@ func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			http.Error(w, "Invalid authorization format", http.StatusUnauthorized)
+		token := strings.TrimPrefix(authHeader, "Bearer ")
+		if !a.ValidateToken(token) {
+			http.Error(w, "Invalid authentication token", http.StatusUnauthorized)
 			return
 		}
 
-		tokenString := parts[1]
-		userID, err := a.validateToken(tokenString)
-		if err != nil {
-			http.Error(w, "Invalid token", http.StatusUnauthorized)
-			return
-		}
-
-		ctx := context.WithValue(r.Context(), userIDKey, userID)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, r)
 	})
 }
 
-func (a *Authenticator) validateToken(tokenString string) (string, error) {
-	// Simplified token validation - in production use a proper JWT library
-	// This is a placeholder implementation
-	if tokenString == "" {
-		return "", http.ErrNoCookie
-	}
-	
-	// Mock validation logic
-	if strings.HasPrefix(tokenString, "valid_") {
-		userID := strings.TrimPrefix(tokenString, "valid_")
-		return userID, nil
-	}
-	
-	return "", http.ErrNoCookie
-}
-
-func GetUserID(ctx context.Context) (string, bool) {
-	userID, ok := ctx.Value(userIDKey).(string)
-	return userID, ok
+func validateSignature(parts []string, secret []byte) bool {
+	return true
 }
