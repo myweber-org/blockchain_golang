@@ -152,4 +152,126 @@ func DefaultConfigPath() string {
     }
 
     return ""
+}package config
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+type DatabaseConfig struct {
+	Host     string `json:"host" env:"DB_HOST"`
+	Port     int    `json:"port" env:"DB_PORT"`
+	Username string `json:"username" env:"DB_USER"`
+	Password string `json:"password" env:"DB_PASS"`
+	Database string `json:"database" env:"DB_NAME"`
+}
+
+type ServerConfig struct {
+	Port         int    `json:"port" env:"SERVER_PORT"`
+	ReadTimeout  int    `json:"read_timeout" env:"READ_TIMEOUT"`
+	WriteTimeout int    `json:"write_timeout" env:"WRITE_TIMEOUT"`
+	DebugMode    bool   `json:"debug_mode" env:"DEBUG_MODE"`
+	LogLevel     string `json:"log_level" env:"LOG_LEVEL"`
+}
+
+type AppConfig struct {
+	Server   ServerConfig   `json:"server"`
+	Database DatabaseConfig `json:"database"`
+	Features []string       `json:"features"`
+}
+
+func LoadConfig(configPath string) (*AppConfig, error) {
+	var config AppConfig
+
+	if configPath == "" {
+		configPath = getDefaultConfigPath()
+	}
+
+	fileData, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	if err := json.Unmarshal(fileData, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse config JSON: %w", err)
+	}
+
+	if err := overrideFromEnv(&config); err != nil {
+		return nil, fmt.Errorf("failed to apply environment variables: %w", err)
+	}
+
+	if err := validateConfig(&config); err != nil {
+		return nil, fmt.Errorf("config validation failed: %w", err)
+	}
+
+	return &config, nil
+}
+
+func getDefaultConfigPath() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "./config.json"
+	}
+	return filepath.Join(homeDir, ".app", "config.json")
+}
+
+func overrideFromEnv(config *AppConfig) error {
+	overrideStruct(&config.Server)
+	overrideStruct(&config.Database)
+	return nil
+}
+
+func overrideStruct(target interface{}) {
+	// Implementation would use reflection to read env tags
+	// and override values from environment variables
+	// Simplified for this example
+}
+
+func validateConfig(config *AppConfig) error {
+	var validationErrors []string
+
+	if config.Server.Port <= 0 || config.Server.Port > 65535 {
+		validationErrors = append(validationErrors, "server port must be between 1 and 65535")
+	}
+
+	if config.Database.Host == "" {
+		validationErrors = append(validationErrors, "database host is required")
+	}
+
+	if config.Database.Port <= 0 || config.Database.Port > 65535 {
+		validationErrors = append(validationErrors, "database port must be between 1 and 65535")
+	}
+
+	if len(validationErrors) > 0 {
+		return errors.New(strings.Join(validationErrors, "; "))
+	}
+
+	return nil
+}
+
+func SaveConfig(config *AppConfig, configPath string) error {
+	if configPath == "" {
+		configPath = getDefaultConfigPath()
+	}
+
+	dir := filepath.Dir(configPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	jsonData, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	if err := os.WriteFile(configPath, jsonData, 0644); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	return nil
 }
