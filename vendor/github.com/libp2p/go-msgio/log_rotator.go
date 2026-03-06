@@ -336,3 +336,124 @@ func main() {
         time.Sleep(10 * time.Millisecond)
     }
 }
+package main
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+)
+
+const (
+	maxFileSize = 10 * 1024 * 1024 // 10MB
+	maxBackups  = 5
+)
+
+type RotatingWriter struct {
+	mu       sync.Mutex
+	filename string
+	file     *os.File
+	size     int64
+}
+
+func NewRotatingWriter(filename string) (*RotatingWriter, error) {
+	w := &RotatingWriter{filename: filename}
+	if err := w.rotateIfNeeded(); err != nil {
+		return nil, err
+	}
+	return w, nil
+}
+
+func (w *RotatingWriter) Write(p []byte) (n int, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if err := w.rotateIfNeeded(); err != nil {
+		return 0, err
+	}
+
+	n, err = w.file.Write(p)
+	w.size += int64(n)
+	return n, err
+}
+
+func (w *RotatingWriter) rotateIfNeeded() error {
+	if w.file == nil || w.size >= maxFileSize {
+		if w.file != nil {
+			w.file.Close()
+		}
+		return w.rotate()
+	}
+	return nil
+}
+
+func (w *RotatingWriter) rotate() error {
+	now := time.Now()
+	timestamp := now.Format("20060102_150405")
+
+	if err := os.MkdirAll(filepath.Dir(w.filename), 0755); err != nil {
+		return err
+	}
+
+	newFilename := fmt.Sprintf("%s.%s", w.filename, timestamp)
+	if _, err := os.Stat(w.filename); err == nil {
+		if err := os.Rename(w.filename, newFilename); err != nil {
+			return err
+		}
+	}
+
+	file, err := os.OpenFile(w.filename, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+
+	w.file = file
+	w.size = 0
+
+	go w.cleanupOldFiles()
+	return nil
+}
+
+func (w *RotatingWriter) cleanupOldFiles() {
+	dir := filepath.Dir(w.filename)
+	base := filepath.Base(w.filename)
+
+	files, err := filepath.Glob(filepath.Join(dir, base+".*"))
+	if err != nil {
+		return
+	}
+
+	if len(files) > maxBackups {
+		for i := 0; i < len(files)-maxBackups; i++ {
+			os.Remove(files[i])
+		}
+	}
+}
+
+func (w *RotatingWriter) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.file != nil {
+		return w.file.Close()
+	}
+	return nil
+}
+
+func main() {
+	writer, err := NewRotatingWriter("logs/app.log")
+	if err != nil {
+		fmt.Printf("Failed to create writer: %v\n", err)
+		return
+	}
+	defer writer.Close()
+
+	for i := 0; i < 100; i++ {
+		message := fmt.Sprintf("Log entry %d at %s\n", i, time.Now().Format(time.RFC3339))
+		writer.Write([]byte(message))
+		time.Sleep(100 * time.Millisecond)
+	}
+}
