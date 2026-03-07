@@ -106,4 +106,124 @@ func ActivityLogger(next http.Handler) http.Handler {
             duration,
         )
     })
+}package main
+
+import (
+    "encoding/json"
+    "log"
+    "net/http"
+    "sync"
+    "time"
+)
+
+type ActivityLog struct {
+    Timestamp time.Time `json:"timestamp"`
+    UserID    string    `json:"user_id"`
+    Action    string    `json:"action"`
+    IPAddress string    `json:"ip_address"`
+}
+
+type RateLimiter struct {
+    requests map[string][]time.Time
+    mu       sync.RWMutex
+    limit    int
+    window   time.Duration
+}
+
+func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
+    return &RateLimiter{
+        requests: make(map[string][]time.Time),
+        limit:    limit,
+        window:   window,
+    }
+}
+
+func (rl *RateLimiter) Allow(ip string) bool {
+    rl.mu.Lock()
+    defer rl.mu.Unlock()
+
+    now := time.Now()
+    windowStart := now.Add(-rl.window)
+
+    timestamps := rl.requests[ip]
+    validRequests := []time.Time{}
+
+    for _, ts := range timestamps {
+        if ts.After(windowStart) {
+            validRequests = append(validRequests, ts)
+        }
+    }
+
+    if len(validRequests) >= rl.limit {
+        return false
+    }
+
+    validRequests = append(validRequests, now)
+    rl.requests[ip] = validRequests
+
+    return true
+}
+
+func loggingMiddleware(next http.Handler) http.Handler {
+    limiter := NewRateLimiter(100, time.Minute)
+
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        ip := r.RemoteAddr
+
+        if !limiter.Allow(ip) {
+            http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
+            return
+        }
+
+        userID := r.Header.Get("X-User-ID")
+        if userID == "" {
+            userID = "anonymous"
+        }
+
+        logEntry := ActivityLog{
+            Timestamp: time.Now(),
+            UserID:    userID,
+            Action:    r.Method + " " + r.URL.Path,
+            IPAddress: ip,
+        }
+
+        logData, err := json.Marshal(logEntry)
+        if err != nil {
+            log.Printf("Failed to marshal log entry: %v", err)
+        } else {
+            log.Printf("Activity: %s", string(logData))
+        }
+
+        next.ServeHTTP(w, r)
+    })
+}
+
+func apiHandler(w http.ResponseWriter, r *http.Request) {
+    response := map[string]string{
+        "status":  "success",
+        "message": "Request processed",
+        "time":    time.Now().Format(time.RFC3339),
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(response)
+}
+
+func main() {
+    mux := http.NewServeMux()
+    mux.HandleFunc("/api", apiHandler)
+
+    wrappedMux := loggingMiddleware(mux)
+
+    server := &http.Server{
+        Addr:         ":8080",
+        Handler:      wrappedMux,
+        ReadTimeout:  10 * time.Second,
+        WriteTimeout: 10 * time.Second,
+    }
+
+    log.Println("Server starting on :8080")
+    if err := server.ListenAndServe(); err != nil {
+        log.Fatal(err)
+    }
 }
