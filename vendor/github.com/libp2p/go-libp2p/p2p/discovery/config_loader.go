@@ -1,46 +1,43 @@
 package config
 
 import (
-    "os"
-    "strconv"
+    "fmt"
+    "io/ioutil"
+    "gopkg.in/yaml.v2"
 )
 
-type Config struct {
-    ServerPort int
-    DatabaseURL string
-    EnableDebug bool
-    MaxConnections int
+type AppConfig struct {
+    Server struct {
+        Host string `yaml:"host"`
+        Port int    `yaml:"port"`
+    } `yaml:"server"`
+    Database struct {
+        Host     string `yaml:"host"`
+        Username string `yaml:"username"`
+        Password string `yaml:"password"`
+    } `yaml:"database"`
 }
 
-func LoadConfig() (*Config, error) {
-    cfg := &Config{
-        ServerPort:     8080,
-        DatabaseURL:    "localhost:5432",
-        EnableDebug:    false,
-        MaxConnections: 10,
+func LoadConfig(path string) (*AppConfig, error) {
+    data, err := ioutil.ReadFile(path)
+    if err != nil {
+        return nil, fmt.Errorf("failed to read config file: %w", err)
     }
 
-    if portStr := os.Getenv("SERVER_PORT"); portStr != "" {
-        if port, err := strconv.Atoi(portStr); err == nil {
-            cfg.ServerPort = port
-        }
+    var config AppConfig
+    if err := yaml.Unmarshal(data, &config); err != nil {
+        return nil, fmt.Errorf("failed to parse YAML: %w", err)
     }
 
-    if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
-        cfg.DatabaseURL = dbURL
-    }
+    return &config, nil
+}
 
-    if debugStr := os.Getenv("ENABLE_DEBUG"); debugStr != "" {
-        if debug, err := strconv.ParseBool(debugStr); err == nil {
-            cfg.EnableDebug = debug
-        }
+func (c *AppConfig) Validate() error {
+    if c.Server.Host == "" {
+        return fmt.Errorf("server host cannot be empty")
     }
-
-    if maxConnStr := os.Getenv("MAX_CONNECTIONS"); maxConnStr != "" {
-        if maxConn, err := strconv.Atoi(maxConnStr); err == nil {
-            cfg.MaxConnections = maxConn
-        }
+    if c.Server.Port <= 0 {
+        return fmt.Errorf("server port must be positive")
     }
-
-    return cfg, nil
+    return nil
 }
