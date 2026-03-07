@@ -84,4 +84,91 @@ func validateConfig(config *AppConfig) error {
 	}
 
 	return nil
+}package config
+
+import (
+	"io/ioutil"
+	"os"
+	"path/filepath"
+
+	"gopkg.in/yaml.v2"
+)
+
+type Config struct {
+	Server struct {
+		Host string `yaml:"host" env:"SERVER_HOST"`
+		Port int    `yaml:"port" env:"SERVER_PORT"`
+	} `yaml:"server"`
+	Database struct {
+		Host     string `yaml:"host" env:"DB_HOST"`
+		Port     int    `yaml:"port" env:"DB_PORT"`
+		Name     string `yaml:"name" env:"DB_NAME"`
+		Username string `yaml:"username" env:"DB_USER"`
+		Password string `yaml:"password" env:"DB_PASS"`
+	} `yaml:"database"`
+	Logging struct {
+		Level  string `yaml:"level" env:"LOG_LEVEL"`
+		Output string `yaml:"output" env:"LOG_OUTPUT"`
+	} `yaml:"logging"`
+}
+
+func LoadConfig(configPath string) (*Config, error) {
+	config := &Config{}
+
+	absPath, err := filepath.Abs(configPath)
+	if err != nil {
+		return nil, err
+	}
+
+	yamlFile, err := ioutil.ReadFile(absPath)
+	if err != nil {
+		return nil, err
+	}
+
+	err = yaml.Unmarshal(yamlFile, config)
+	if err != nil {
+		return nil, err
+	}
+
+	overrideFromEnv(config)
+
+	return config, nil
+}
+
+func overrideFromEnv(c *Config) {
+	if env := os.Getenv("SERVER_HOST"); env != "" {
+		c.Server.Host = env
+	}
+	if env := os.Getenv("SERVER_PORT"); env != "" {
+		port := 0
+		fmt.Sscanf(env, "%d", &port)
+		if port > 0 {
+			c.Server.Port = port
+		}
+	}
+	if env := os.Getenv("DB_HOST"); env != "" {
+		c.Database.Host = env
+	}
+	if env := os.Getenv("DB_PORT"); env != "" {
+		port := 0
+		fmt.Sscanf(env, "%d", &port)
+		if port > 0 {
+			c.Database.Port = port
+		}
+	}
+	if env := os.Getenv("DB_NAME"); env != "" {
+		c.Database.Name = env
+	}
+	if env := os.Getenv("DB_USER"); env != "" {
+		c.Database.Username = env
+	}
+	if env := os.Getenv("DB_PASS"); env != "" {
+		c.Database.Password = env
+	}
+	if env := os.Getenv("LOG_LEVEL"); env != "" {
+		c.Logging.Level = env
+	}
+	if env := os.Getenv("LOG_OUTPUT"); env != "" {
+		c.Logging.Output = env
+	}
 }
