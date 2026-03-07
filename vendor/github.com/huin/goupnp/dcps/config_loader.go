@@ -76,4 +76,101 @@ func getEnvIntOrDefault(key string, defaultValue int) int {
 		}
 	}
 	return defaultValue
+}package config
+
+import (
+    "fmt"
+    "os"
+    "strconv"
+    "strings"
+)
+
+type Config struct {
+    ServerPort int
+    DBHost     string
+    DBPort     int
+    DebugMode  bool
+    APIKeys    []string
+}
+
+func LoadConfig() (*Config, error) {
+    cfg := &Config{}
+    
+    var err error
+    cfg.ServerPort, err = getEnvInt("SERVER_PORT", 8080)
+    if err != nil {
+        return nil, fmt.Errorf("invalid SERVER_PORT: %w", err)
+    }
+    
+    cfg.DBHost = getEnvString("DB_HOST", "localhost")
+    
+    cfg.DBPort, err = getEnvInt("DB_PORT", 5432)
+    if err != nil {
+        return nil, fmt.Errorf("invalid DB_PORT: %w", err)
+    }
+    
+    cfg.DebugMode, err = getEnvBool("DEBUG_MODE", false)
+    if err != nil {
+        return nil, fmt.Errorf("invalid DEBUG_MODE: %w", err)
+    }
+    
+    cfg.APIKeys = getEnvSlice("API_KEYS", []string{}, ",")
+    
+    if err := validateConfig(cfg); err != nil {
+        return nil, fmt.Errorf("config validation failed: %w", err)
+    }
+    
+    return cfg, nil
+}
+
+func getEnvString(key, defaultValue string) string {
+    if value := os.Getenv(key); value != "" {
+        return value
+    }
+    return defaultValue
+}
+
+func getEnvInt(key string, defaultValue int) (int, error) {
+    if value := os.Getenv(key); value != "" {
+        intValue, err := strconv.Atoi(value)
+        if err != nil {
+            return 0, fmt.Errorf("cannot parse %s as integer: %w", key, err)
+        }
+        return intValue, nil
+    }
+    return defaultValue, nil
+}
+
+func getEnvBool(key string, defaultValue bool) (bool, error) {
+    if value := os.Getenv(key); value != "" {
+        boolValue, err := strconv.ParseBool(value)
+        if err != nil {
+            return false, fmt.Errorf("cannot parse %s as boolean: %w", key, err)
+        }
+        return boolValue, nil
+    }
+    return defaultValue, nil
+}
+
+func getEnvSlice(key string, defaultValue []string, separator string) []string {
+    if value := os.Getenv(key); value != "" {
+        return strings.Split(value, separator)
+    }
+    return defaultValue
+}
+
+func validateConfig(cfg *Config) error {
+    if cfg.ServerPort < 1 || cfg.ServerPort > 65535 {
+        return fmt.Errorf("server port must be between 1 and 65535")
+    }
+    
+    if cfg.DBPort < 1 || cfg.DBPort > 65535 {
+        return fmt.Errorf("database port must be between 1 and 65535")
+    }
+    
+    if cfg.DBHost == "" {
+        return fmt.Errorf("database host cannot be empty")
+    }
+    
+    return nil
 }
