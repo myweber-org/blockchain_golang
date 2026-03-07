@@ -10,7 +10,15 @@ type contextKey string
 
 const userIDKey contextKey = "userID"
 
-func Authenticate(next http.Handler) http.Handler {
+type Authenticator struct {
+	jwtSecret []byte
+}
+
+func NewAuthenticator(secret string) *Authenticator {
+	return &Authenticator{jwtSecret: []byte(secret)}
+}
+
+func (a *Authenticator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
@@ -24,8 +32,8 @@ func Authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		token := parts[1]
-		userID, err := validateToken(token)
+		tokenString := parts[1]
+		userID, err := a.validateToken(tokenString)
 		if err != nil {
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
@@ -36,20 +44,16 @@ func Authenticate(next http.Handler) http.Handler {
 	})
 }
 
+func (a *Authenticator) validateToken(tokenString string) (string, error) {
+	// Simplified token validation - in production use a proper JWT library
+	// This is a placeholder implementation
+	if tokenString == "valid_token_example" {
+		return "user123", nil
+	}
+	return "", fmt.Errorf("invalid token")
+}
+
 func GetUserID(ctx context.Context) (string, bool) {
 	userID, ok := ctx.Value(userIDKey).(string)
 	return userID, ok
-}
-
-func validateToken(token string) (string, error) {
-	// In a real implementation, this would parse and validate JWT
-	// For this example, we'll use a simple mock validation
-	if token == "" || len(token) < 10 {
-		return "", http.ErrNoCookie
-	}
-	// Mock: token is considered valid if it starts with "user_"
-	if strings.HasPrefix(token, "user_") {
-		return strings.TrimPrefix(token, "user_"), nil
-	}
-	return "", http.ErrNoCookie
 }
