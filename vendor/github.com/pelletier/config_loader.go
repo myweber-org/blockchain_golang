@@ -125,4 +125,87 @@ func validateConfig(config *AppConfig) error {
 	}
 
 	return nil
+}package config
+
+import (
+    "fmt"
+    "os"
+    "strconv"
+    "strings"
+)
+
+type Config struct {
+    Port        int
+    DatabaseURL string
+    LogLevel    string
+    CacheTTL    int
+}
+
+func LoadConfig(filePath string) (*Config, error) {
+    cfg := &Config{
+        Port:     8080,
+        LogLevel: "info",
+        CacheTTL: 300,
+    }
+
+    data, err := os.ReadFile(filePath)
+    if err != nil {
+        return nil, fmt.Errorf("failed to read config file: %w", err)
+    }
+
+    lines := strings.Split(string(data), "\n")
+    for _, line := range lines {
+        line = strings.TrimSpace(line)
+        if line == "" || strings.HasPrefix(line, "#") {
+            continue
+        }
+
+        parts := strings.SplitN(line, "=", 2)
+        if len(parts) != 2 {
+            continue
+        }
+
+        key := strings.TrimSpace(parts[0])
+        value := strings.TrimSpace(parts[1])
+
+        switch key {
+        case "PORT":
+            if port, err := strconv.Atoi(value); err == nil {
+                cfg.Port = port
+            }
+        case "DATABASE_URL":
+            cfg.DatabaseURL = os.ExpandEnv(value)
+        case "LOG_LEVEL":
+            cfg.LogLevel = value
+        case "CACHE_TTL":
+            if ttl, err := strconv.Atoi(value); err == nil {
+                cfg.CacheTTL = ttl
+            }
+        }
+    }
+
+    if cfg.DatabaseURL == "" {
+        return nil, fmt.Errorf("DATABASE_URL is required")
+    }
+
+    return cfg, nil
+}
+
+func (c *Config) Validate() error {
+    if c.Port < 1 || c.Port > 65535 {
+        return fmt.Errorf("invalid port number: %d", c.Port)
+    }
+    if c.CacheTTL < 0 {
+        return fmt.Errorf("cache TTL cannot be negative")
+    }
+    validLogLevels := map[string]bool{
+        "debug": true,
+        "info":  true,
+        "warn":  true,
+        "error": true,
+    }
+    if !validLogLevels[strings.ToLower(c.LogLevel)] {
+        return fmt.Errorf("invalid log level: %s", c.LogLevel)
+    }
+    return nil
 }
