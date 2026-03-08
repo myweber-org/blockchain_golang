@@ -65,4 +65,60 @@ func validateConfig(config *ServerConfig) error {
     }
 
     return nil
+}package config
+
+import (
+    "fmt"
+    "os"
+    "strconv"
+    "strings"
+)
+
+type Config struct {
+    ServerPort int
+    DatabaseURL string
+    LogLevel string
+    CacheEnabled bool
+}
+
+func LoadConfig() (*Config, error) {
+    cfg := &Config{}
+    
+    portStr := getEnv("SERVER_PORT", "8080")
+    port, err := strconv.Atoi(portStr)
+    if err != nil {
+        return nil, fmt.Errorf("invalid SERVER_PORT: %v", err)
+    }
+    cfg.ServerPort = port
+    
+    cfg.DatabaseURL = getEnv("DATABASE_URL", "postgres://localhost:5432/app")
+    
+    logLevel := strings.ToLower(getEnv("LOG_LEVEL", "info"))
+    if !isValidLogLevel(logLevel) {
+        return nil, fmt.Errorf("invalid LOG_LEVEL: %s", logLevel)
+    }
+    cfg.LogLevel = logLevel
+    
+    cacheEnabled := getEnv("CACHE_ENABLED", "true")
+    cfg.CacheEnabled = strings.ToLower(cacheEnabled) == "true"
+    
+    return cfg, nil
+}
+
+func getEnv(key, defaultValue string) string {
+    value := os.Getenv(key)
+    if value == "" {
+        return defaultValue
+    }
+    return value
+}
+
+func isValidLogLevel(level string) bool {
+    validLevels := []string{"debug", "info", "warn", "error", "fatal"}
+    for _, valid := range validLevels {
+        if level == valid {
+            return true
+        }
+    }
+    return false
 }
