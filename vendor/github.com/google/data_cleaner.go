@@ -129,4 +129,42 @@ func main() {
 	cleaned := RemoveDuplicates(original)
 	fmt.Printf("Original: %v\n", original)
 	fmt.Printf("Cleaned: %v\n", cleaned)
+}package utils
+
+import (
+	"regexp"
+	"strings"
+	"unicode"
+)
+
+func SanitizeString(input string) string {
+	// Trim leading/trailing whitespace
+	trimmed := strings.TrimSpace(input)
+	
+	// Replace multiple spaces with single space
+	spaceRegex := regexp.MustCompile(`\s+`)
+	normalized := spaceRegex.ReplaceAllString(trimmed, " ")
+	
+	// Remove non-printable characters
+	var result strings.Builder
+	for _, r := range normalized {
+		if unicode.IsPrint(r) {
+			result.WriteRune(r)
+		}
+	}
+	
+	return result.String()
+}
+
+func NormalizeWhitespace(input string) string {
+	return strings.Join(strings.Fields(input), " ")
+}
+
+func IsValidASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] > unicode.MaxASCII {
+			return false
+		}
+	}
+	return true
 }
