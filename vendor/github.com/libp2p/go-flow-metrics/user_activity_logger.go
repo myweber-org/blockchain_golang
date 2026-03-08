@@ -1,81 +1,4 @@
-package main
-
-import (
-	"encoding/json"
-	"fmt"
-	"os"
-	"time"
-)
-
-type Activity struct {
-	Timestamp time.Time `json:"timestamp"`
-	UserID    string    `json:"user_id"`
-	Action    string    `json:"action"`
-	Details   string    `json:"details"`
-}
-
-type ActivityLogger struct {
-	logFile *os.File
-}
-
-func NewActivityLogger(filename string) (*ActivityLogger, error) {
-	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return nil, err
-	}
-	return &ActivityLogger{logFile: file}, nil
-}
-
-func (l *ActivityLogger) LogActivity(userID, action, details string) error {
-	activity := Activity{
-		Timestamp: time.Now().UTC(),
-		UserID:    userID,
-		Action:    action,
-		Details:   details,
-	}
-
-	data, err := json.Marshal(activity)
-	if err != nil {
-		return err
-	}
-
-	data = append(data, '\n')
-	_, err = l.logFile.Write(data)
-	return err
-}
-
-func (l *ActivityLogger) Close() error {
-	return l.logFile.Close()
-}
-
-func main() {
-	logger, err := NewActivityLogger("activity.log")
-	if err != nil {
-		fmt.Printf("Failed to create logger: %v\n", err)
-		return
-	}
-	defer logger.Close()
-
-	activities := []struct {
-		userID  string
-		action  string
-		details string
-	}{
-		{"user_001", "LOGIN", "User logged in from IP 192.168.1.100"},
-		{"user_001", "VIEW_PAGE", "Accessed dashboard page"},
-		{"user_002", "REGISTER", "New user registration completed"},
-		{"user_001", "LOGOUT", "User session terminated"},
-	}
-
-	for _, act := range activities {
-		err := logger.LogActivity(act.userID, act.action, act.details)
-		if err != nil {
-			fmt.Printf("Failed to log activity: %v\n", err)
-		}
-	}
-
-	fmt.Println("Activity logging completed")
-}package middleware
+package middleware
 
 import (
 	"log"
@@ -93,76 +16,14 @@ func NewActivityLogger(handler http.Handler) *ActivityLogger {
 
 func (al *ActivityLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
-	recorder := &responseRecorder{
-		ResponseWriter: w,
-		statusCode:     http.StatusOK,
-	}
-
-	al.handler.ServeHTTP(recorder, r)
-
+	al.handler.ServeHTTP(w, r)
 	duration := time.Since(start)
+
 	log.Printf(
-		"Method: %s | Path: %s | Status: %d | Duration: %v | IP: %s",
+		"Method: %s, Path: %s, Duration: %v, Timestamp: %s",
 		r.Method,
 		r.URL.Path,
-		recorder.statusCode,
 		duration,
-		r.RemoteAddr,
+		time.Now().Format(time.RFC3339),
 	)
-}
-
-type responseRecorder struct {
-	http.ResponseWriter
-	statusCode int
-}
-
-func (rr *responseRecorder) WriteHeader(code int) {
-	rr.statusCode = code
-	rr.ResponseWriter.WriteHeader(code)
-}package middleware
-
-import (
-	"log"
-	"net/http"
-	"time"
-)
-
-type ActivityLogger struct {
-	handler http.Handler
-}
-
-func NewActivityLogger(handler http.Handler) *ActivityLogger {
-	return &ActivityLogger{handler: handler}
-}
-
-func (al *ActivityLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	startTime := time.Now()
-	
-	recorder := &responseRecorder{
-		ResponseWriter: w,
-		statusCode:     http.StatusOK,
-	}
-	
-	al.handler.ServeHTTP(recorder, r)
-	
-	duration := time.Since(startTime)
-	
-	log.Printf(
-		"Method: %s | Path: %s | Status: %d | Duration: %v | RemoteAddr: %s",
-		r.Method,
-		r.URL.Path,
-		recorder.statusCode,
-		duration,
-		r.RemoteAddr,
-	)
-}
-
-type responseRecorder struct {
-	http.ResponseWriter
-	statusCode int
-}
-
-func (rr *responseRecorder) WriteHeader(code int) {
-	rr.statusCode = code
-	rr.ResponseWriter.WriteHeader(code)
 }
