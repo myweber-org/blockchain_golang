@@ -289,3 +289,35 @@ func main() {
 
     fmt.Printf("Successfully processed %d records to %s\n", len(records), outputFile)
 }
+package main
+
+import (
+	"strings"
+	"unicode"
+)
+
+func CleanInput(input string) string {
+	trimmed := strings.TrimSpace(input)
+	var builder strings.Builder
+	for _, r := range trimmed {
+		if unicode.IsGraphic(r) && !unicode.IsControl(r) {
+			builder.WriteRune(r)
+		}
+	}
+	return builder.String()
+}
+
+func NormalizeWhitespace(input string) string {
+	cleaned := CleanInput(input)
+	fields := strings.Fields(cleaned)
+	return strings.Join(fields, " ")
+}
+
+func ContainsOnlyLetters(input string) bool {
+	for _, r := range input {
+		if !unicode.IsLetter(r) {
+			return false
+		}
+	}
+	return true
+}
