@@ -269,3 +269,51 @@ func main() {
 
 	fmt.Printf("Successfully cleaned data. Output saved to %s\n", outputFile)
 }
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+type DataCleaner struct {
+	seen map[string]bool
+}
+
+func NewDataCleaner() *DataCleaner {
+	return &DataCleaner{
+		seen: make(map[string]bool),
+	}
+}
+
+func (dc *DataCleaner) Clean(input []string) []string {
+	var result []string
+	for _, item := range input {
+		normalized := strings.ToLower(strings.TrimSpace(item))
+		if !dc.seen[normalized] && normalized != "" {
+			dc.seen[normalized] = true
+			result = append(result, normalized)
+		}
+	}
+	return result
+}
+
+func (dc *DataCleaner) Reset() {
+	dc.seen = make(map[string]bool)
+}
+
+func main() {
+	cleaner := NewDataCleaner()
+	
+	data := []string{"  Apple", "banana", "apple", "Banana", "  ", "cherry"}
+	cleaned := cleaner.Clean(data)
+	
+	fmt.Println("Original:", data)
+	fmt.Println("Cleaned:", cleaned)
+	
+	cleaner.Reset()
+	
+	moreData := []string{"grape", "Grape", "GRAPE"}
+	cleaned2 := cleaner.Clean(moreData)
+	fmt.Println("Second batch:", cleaned2)
+}
