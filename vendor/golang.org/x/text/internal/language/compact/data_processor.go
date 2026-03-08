@@ -105,3 +105,80 @@ func main() {
 
 	fmt.Println("Data processing completed successfully")
 }
+package main
+
+import (
+	"errors"
+	"regexp"
+	"strings"
+	"time"
+)
+
+type UserProfile struct {
+	ID        int
+	Username  string
+	Email     string
+	Age       int
+	CreatedAt time.Time
+}
+
+func ValidateUsername(username string) error {
+	if len(username) < 3 || len(username) > 20 {
+		return errors.New("username must be between 3 and 20 characters")
+	}
+	validPattern := regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
+	if !validPattern.MatchString(username) {
+		return errors.New("username can only contain letters, numbers, and underscores")
+	}
+	return nil
+}
+
+func ValidateEmail(email string) error {
+	emailPattern := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+	if !emailPattern.MatchString(email) {
+		return errors.New("invalid email format")
+	}
+	return nil
+}
+
+func NormalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+func TransformProfile(profile *UserProfile) error {
+	if err := ValidateUsername(profile.Username); err != nil {
+		return err
+	}
+
+	if err := ValidateEmail(profile.Email); err != nil {
+		return err
+	}
+
+	profile.Email = NormalizeEmail(profile.Email)
+
+	if profile.Age < 0 {
+		profile.Age = 0
+	} else if profile.Age > 150 {
+		profile.Age = 150
+	}
+
+	return nil
+}
+
+func ProcessUserProfiles(profiles []UserProfile) ([]UserProfile, error) {
+	var validProfiles []UserProfile
+
+	for _, profile := range profiles {
+		profileCopy := profile
+		if err := TransformProfile(&profileCopy); err != nil {
+			continue
+		}
+		validProfiles = append(validProfiles, profileCopy)
+	}
+
+	if len(validProfiles) == 0 {
+		return nil, errors.New("no valid profiles found")
+	}
+
+	return validProfiles, nil
+}
