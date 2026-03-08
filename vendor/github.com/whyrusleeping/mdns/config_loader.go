@@ -3,9 +3,10 @@ package config
 import (
 	"errors"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 type DatabaseConfig struct {
@@ -14,6 +15,7 @@ type DatabaseConfig struct {
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
 	Database string `yaml:"database"`
+	SSLMode  string `yaml:"ssl_mode"`
 }
 
 type ServerConfig struct {
@@ -39,14 +41,17 @@ func LoadConfig(configPath string) (*AppConfig, error) {
 		return nil, err
 	}
 
+	if _, err := os.Stat(absPath); os.IsNotExist(err) {
+		return nil, errors.New("config file does not exist")
+	}
+
 	data, err := ioutil.ReadFile(absPath)
 	if err != nil {
 		return nil, err
 	}
 
 	var config AppConfig
-	err = yaml.Unmarshal(data, &config)
-	if err != nil {
+	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, err
 	}
 
@@ -62,16 +67,27 @@ func validateConfig(config *AppConfig) error {
 		return errors.New("server port must be between 1 and 65535")
 	}
 
-	if config.Database.Host == "" {
-		return errors.New("database host cannot be empty")
-	}
-
 	if config.Database.Port <= 0 || config.Database.Port > 65535 {
 		return errors.New("database port must be between 1 and 65535")
 	}
 
+	if config.Database.Host == "" {
+		return errors.New("database host cannot be empty")
+	}
+
 	if config.Database.Database == "" {
 		return errors.New("database name cannot be empty")
+	}
+
+	validLogLevels := map[string]bool{
+		"debug": true,
+		"info":  true,
+		"warn":  true,
+		"error": true,
+	}
+
+	if !validLogLevels[config.Server.LogLevel] {
+		return errors.New("invalid log level")
 	}
 
 	return nil
