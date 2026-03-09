@@ -65,55 +65,64 @@ func generateRandomKey() ([]byte, error) {
 }
 
 func main() {
-    if len(os.Args) < 2 {
-        fmt.Println("Usage: go run file_encryptor.go <encrypt|decrypt>")
+    if len(os.Args) < 3 {
+        fmt.Println("Usage: go run file_encryptor.go <encrypt|decrypt> <filename>")
         os.Exit(1)
     }
 
     action := os.Args[1]
+    filename := os.Args[2]
+
+    data, err := os.ReadFile(filename)
+    if err != nil {
+        fmt.Printf("Error reading file: %v\n", err)
+        os.Exit(1)
+    }
+
     key, err := generateRandomKey()
     if err != nil {
         fmt.Printf("Error generating key: %v\n", err)
         os.Exit(1)
     }
 
-    sampleData := []byte("This is a secret message that needs protection.")
-
     switch action {
     case "encrypt":
-        encrypted, err := encryptData(sampleData, key)
+        encrypted, err := encryptData(data, key)
         if err != nil {
             fmt.Printf("Encryption error: %v\n", err)
             os.Exit(1)
         }
-        encoded := base64.StdEncoding.EncodeToString(encrypted)
-        fmt.Printf("Encrypted data (base64): %s\n", encoded)
+        encryptedFile := filename + ".enc"
+        if err := os.WriteFile(encryptedFile, encrypted, 0644); err != nil {
+            fmt.Printf("Error writing encrypted file: %v\n", err)
+            os.Exit(1)
+        }
+        fmt.Printf("File encrypted successfully: %s\n", encryptedFile)
         fmt.Printf("Encryption key (base64): %s\n", base64.StdEncoding.EncodeToString(key))
 
     case "decrypt":
-        if len(os.Args) < 4 {
-            fmt.Println("Usage for decrypt: go run file_encryptor.go decrypt <base64_data> <base64_key>")
-            os.Exit(1)
-        }
+        var keyInput string
+        fmt.Print("Enter decryption key (base64): ")
+        fmt.Scanln(&keyInput)
 
-        encryptedData, err := base64.StdEncoding.DecodeString(os.Args[2])
+        key, err := base64.StdEncoding.DecodeString(keyInput)
         if err != nil {
-            fmt.Printf("Error decoding data: %v\n", err)
+            fmt.Printf("Invalid key format: %v\n", err)
             os.Exit(1)
         }
 
-        decryptionKey, err := base64.StdEncoding.DecodeString(os.Args[3])
-        if err != nil {
-            fmt.Printf("Error decoding key: %v\n", err)
-            os.Exit(1)
-        }
-
-        decrypted, err := decryptData(encryptedData, decryptionKey)
+        decrypted, err := decryptData(data, key)
         if err != nil {
             fmt.Printf("Decryption error: %v\n", err)
             os.Exit(1)
         }
-        fmt.Printf("Decrypted data: %s\n", decrypted)
+
+        decryptedFile := filename + ".dec"
+        if err := os.WriteFile(decryptedFile, decrypted, 0644); err != nil {
+            fmt.Printf("Error writing decrypted file: %v\n", err)
+            os.Exit(1)
+        }
+        fmt.Printf("File decrypted successfully: %s\n", decryptedFile)
 
     default:
         fmt.Println("Invalid action. Use 'encrypt' or 'decrypt'")
