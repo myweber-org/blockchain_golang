@@ -50,3 +50,38 @@ func main() {
 	fmt.Println("Original:", strings)
 	fmt.Println("Unique:", uniqueStrings)
 }
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+type DataCleaner struct {
+	seen map[string]bool
+}
+
+func NewDataCleaner() *DataCleaner {
+	return &DataCleaner{
+		seen: make(map[string]bool),
+	}
+}
+
+func (dc *DataCleaner) Clean(input []string) []string {
+	var result []string
+	for _, item := range input {
+		normalized := strings.ToLower(strings.TrimSpace(item))
+		if !dc.seen[normalized] && normalized != "" {
+			dc.seen[normalized] = true
+			result = append(result, normalized)
+		}
+	}
+	return result
+}
+
+func main() {
+	cleaner := NewDataCleaner()
+	dirtyData := []string{"  Apple", "banana", "apple", "  ", "Banana", "cherry"}
+	cleaned := cleaner.Clean(dirtyData)
+	fmt.Println("Cleaned data:", cleaned)
+}
