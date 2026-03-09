@@ -1,115 +1,75 @@
 package config
 
 import (
-	"errors"
-	"io/ioutil"
-	"os"
-	"path/filepath"
+    "fmt"
+    "io/ioutil"
+    "os"
 
-	"gopkg.in/yaml.v2"
+    "gopkg.in/yaml.v2"
 )
 
 type DatabaseConfig struct {
-	Host     string `yaml:"host"`
-	Port     int    `yaml:"port"`
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
-	Database string `yaml:"database"`
-	SSLMode  string `yaml:"ssl_mode"`
+    Host     string `yaml:"host"`
+    Port     int    `yaml:"port"`
+    Username string `yaml:"username"`
+    Password string `yaml:"password"`
+    Name     string `yaml:"name"`
 }
 
 type ServerConfig struct {
-	Port         int    `yaml:"port"`
-	ReadTimeout  int    `yaml:"read_timeout"`
-	WriteTimeout int    `yaml:"write_timeout"`
-	DebugMode    bool   `yaml:"debug_mode"`
-	LogLevel     string `yaml:"log_level"`
+    Port         int    `yaml:"port"`
+    ReadTimeout  int    `yaml:"read_timeout"`
+    WriteTimeout int    `yaml:"write_timeout"`
 }
 
 type AppConfig struct {
-	Server   ServerConfig   `yaml:"server"`
-	Database DatabaseConfig `yaml:"database"`
+    Database DatabaseConfig `yaml:"database"`
+    Server   ServerConfig   `yaml:"server"`
+    Debug    bool           `yaml:"debug"`
 }
 
-func LoadConfig(configPath string) (*AppConfig, error) {
-	if configPath == "" {
-		configPath = getDefaultConfigPath()
-	}
+func LoadConfig(filePath string) (*AppConfig, error) {
+    if _, err := os.Stat(filePath); os.IsNotExist(err) {
+        return nil, fmt.Errorf("config file not found: %s", filePath)
+    }
 
-	absPath, err := filepath.Abs(configPath)
-	if err != nil {
-		return nil, err
-	}
+    data, err := ioutil.ReadFile(filePath)
+    if err != nil {
+        return nil, fmt.Errorf("failed to read config file: %v", err)
+    }
 
-	data, err := ioutil.ReadFile(absPath)
-	if err != nil {
-		return nil, err
-	}
+    var config AppConfig
+    if err := yaml.Unmarshal(data, &config); err != nil {
+        return nil, fmt.Errorf("failed to parse YAML config: %v", err)
+    }
 
-	var config AppConfig
-	if err := yaml.Unmarshal(data, &config); err != nil {
-		return nil, err
-	}
+    if config.Server.Port == 0 {
+        config.Server.Port = 8080
+    }
 
-	if err := validateConfig(&config); err != nil {
-		return nil, err
-	}
+    if config.Database.Host == "" {
+        config.Database.Host = "localhost"
+    }
 
-	return &config, nil
+    return &config, nil
 }
 
-func getDefaultConfigPath() string {
-	paths := []string{
-		"config.yaml",
-		"config.yml",
-		"./config/config.yaml",
-		"/etc/app/config.yaml",
-	}
+func ValidateConfig(config *AppConfig) error {
+    if config.Database.Port < 1 || config.Database.Port > 65535 {
+        return fmt.Errorf("invalid database port: %d", config.Database.Port)
+    }
 
-	for _, path := range paths {
-		if _, err := os.Stat(path); err == nil {
-			return path
-		}
-	}
+    if config.Server.Port < 1 || config.Server.Port > 65535 {
+        return fmt.Errorf("invalid server port: %d", config.Server.Port)
+    }
 
-	return "config.yaml"
-}
+    if config.Server.ReadTimeout < 0 {
+        return fmt.Errorf("read timeout cannot be negative")
+    }
 
-func validateConfig(config *AppConfig) error {
-	if config.Server.Port <= 0 || config.Server.Port > 65535 {
-		return errors.New("server port must be between 1 and 65535")
-	}
+    if config.Server.WriteTimeout < 0 {
+        return fmt.Errorf("write timeout cannot be negative")
+    }
 
-	if config.Server.ReadTimeout < 0 {
-		return errors.New("read timeout cannot be negative")
-	}
-
-	if config.Server.WriteTimeout < 0 {
-		return errors.New("write timeout cannot be negative")
-	}
-
-	if config.Database.Host == "" {
-		return errors.New("database host is required")
-	}
-
-	if config.Database.Port <= 0 || config.Database.Port > 65535 {
-		return errors.New("database port must be between 1 and 65535")
-	}
-
-	if config.Database.Database == "" {
-		return errors.New("database name is required")
-	}
-
-	validLogLevels := map[string]bool{
-		"debug": true,
-		"info":  true,
-		"warn":  true,
-		"error": true,
-	}
-
-	if !validLogLevels[config.Server.LogLevel] {
-		return errors.New("invalid log level")
-	}
-
-	return nil
+    return nil
 }
