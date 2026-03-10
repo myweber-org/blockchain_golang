@@ -99,3 +99,55 @@ func (rr *responseRecorder) WriteHeader(code int) {
 	rr.statusCode = code
 	rr.ResponseWriter.WriteHeader(code)
 }
+package middleware
+
+import (
+	"log"
+	"net/http"
+	"time"
+)
+
+type ActivityLog struct {
+	Timestamp time.Time `json:"timestamp"`
+	Method    string    `json:"method"`
+	Path      string    `json:"path"`
+	UserAgent string    `json:"user_agent"`
+	IPAddress string    `json:"ip_address"`
+	Status    int       `json:"status"`
+}
+
+func ActivityLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		lrw := &loggingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+		
+		next.ServeHTTP(lrw, r)
+		
+		activity := ActivityLog{
+			Timestamp: start,
+			Method:    r.Method,
+			Path:      r.URL.Path,
+			UserAgent: r.UserAgent(),
+			IPAddress: r.RemoteAddr,
+			Status:    lrw.statusCode,
+		}
+		
+		log.Printf("Activity: %s %s %d %s %s",
+			activity.Method,
+			activity.Path,
+			activity.Status,
+			activity.IPAddress,
+			time.Since(start),
+		)
+	})
+}
+
+type loggingResponseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+func (lrw *loggingResponseWriter) WriteHeader(code int) {
+	lrw.statusCode = code
+	lrw.ResponseWriter.WriteHeader(code)
+}
