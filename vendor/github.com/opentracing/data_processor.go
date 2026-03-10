@@ -1,187 +1,57 @@
-
 package main
-
-import (
-	"encoding/csv"
-	"fmt"
-	"io"
-	"os"
-	"strings"
-)
-
-type DataRecord struct {
-	ID      string
-	Name    string
-	Email   string
-	Active  string
-}
-
-func ProcessCSVFile(filename string) ([]DataRecord, error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open file: %w", err)
-	}
-	defer file.Close()
-
-	reader := csv.NewReader(file)
-	reader.TrimLeadingSpace = true
-
-	var records []DataRecord
-	lineNumber := 0
-
-	for {
-		lineNumber++
-		row, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("csv read error at line %d: %w", lineNumber, err)
-		}
-
-		if lineNumber == 1 {
-			continue
-		}
-
-		if len(row) < 4 {
-			return nil, fmt.Errorf("insufficient columns at line %d", lineNumber)
-		}
-
-		record := DataRecord{
-			ID:     strings.TrimSpace(row[0]),
-			Name:   strings.TrimSpace(row[1]),
-			Email:  strings.TrimSpace(row[2]),
-			Active: strings.TrimSpace(row[3]),
-		}
-
-		if record.ID == "" || record.Name == "" {
-			return nil, fmt.Errorf("missing required fields at line %d", lineNumber)
-		}
-
-		if !strings.Contains(record.Email, "@") {
-			return nil, fmt.Errorf("invalid email format at line %d", lineNumber)
-		}
-
-		records = append(records, record)
-	}
-
-	return records, nil
-}
-
-func ValidateRecords(records []DataRecord) []DataRecord {
-	var validRecords []DataRecord
-	for _, record := range records {
-		if record.Active == "true" && len(record.Name) > 0 {
-			validRecords = append(validRecords, record)
-		}
-	}
-	return validRecords
-}
-
-func GenerateReport(records []DataRecord) {
-	fmt.Printf("Total records processed: %d\n", len(records))
-	activeCount := 0
-	for _, record := range records {
-		if record.Active == "true" {
-			activeCount++
-		}
-	}
-	fmt.Printf("Active records: %d\n", activeCount)
-	fmt.Printf("Inactive records: %d\n", len(records)-activeCount)
-}
-
-func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("Usage: go run data_processor.go <csv_file>")
-		os.Exit(1)
-	}
-
-	filename := os.Args[1]
-	records, err := ProcessCSVFile(filename)
-	if err != nil {
-		fmt.Printf("Error processing file: %v\n", err)
-		os.Exit(1)
-	}
-
-	validRecords := ValidateRecords(records)
-	GenerateReport(validRecords)
-
-	fmt.Println("Data processing completed successfully")
-}package main
 
 import (
 	"errors"
-	"regexp"
 	"strings"
+	"unicode"
 )
 
 type UserData struct {
-	Email    string
 	Username string
+	Email    string
 	Age      int
 }
 
-var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
-
 func ValidateUserData(data UserData) error {
-	if strings.TrimSpace(data.Email) == "" {
-		return errors.New("email cannot be empty")
+	if strings.TrimSpace(data.Username) == "" {
+		return errors.New("username cannot be empty")
 	}
-	if !emailRegex.MatchString(data.Email) {
-		return errors.New("invalid email format")
-	}
+
 	if len(data.Username) < 3 || len(data.Username) > 20 {
 		return errors.New("username must be between 3 and 20 characters")
 	}
+
+	for _, r := range data.Username {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '-' {
+			return errors.New("username contains invalid characters")
+		}
+	}
+
+	if !strings.Contains(data.Email, "@") || !strings.Contains(data.Email, ".") {
+		return errors.New("invalid email format")
+	}
+
 	if data.Age < 18 || data.Age > 120 {
 		return errors.New("age must be between 18 and 120")
 	}
+
 	return nil
 }
 
-func NormalizeEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
+func NormalizeUsername(username string) string {
+	return strings.ToLower(strings.TrimSpace(username))
 }
 
-func ProcessUserInput(email, username string, age int) (UserData, error) {
-	normalizedEmail := NormalizeEmail(email)
-	userData := UserData{
-		Email:    normalizedEmail,
-		Username: strings.TrimSpace(username),
-		Age:      age,
-	}
-	if err := ValidateUserData(userData); err != nil {
+func TransformUserData(data UserData) (UserData, error) {
+	if err := ValidateUserData(data); err != nil {
 		return UserData{}, err
 	}
-	return userData, nil
-}
-package main
 
-import "fmt"
+	normalized := UserData{
+		Username: NormalizeUsername(data.Username),
+		Email:    strings.ToLower(strings.TrimSpace(data.Email)),
+		Age:      data.Age,
+	}
 
-func MovingAverage(data []float64, window int) []float64 {
-    if window <= 0 || window > len(data) {
-        return nil
-    }
-
-    result := make([]float64, len(data)-window+1)
-    var sum float64
-
-    for i := 0; i < window; i++ {
-        sum += data[i]
-    }
-    result[0] = sum / float64(window)
-
-    for i := window; i < len(data); i++ {
-        sum = sum - data[i-window] + data[i]
-        result[i-window+1] = sum / float64(window)
-    }
-
-    return result
-}
-
-func main() {
-    sampleData := []float64{1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0}
-    averaged := MovingAverage(sampleData, 3)
-    fmt.Println("Moving average with window 3:", averaged)
+	return normalized, nil
 }
