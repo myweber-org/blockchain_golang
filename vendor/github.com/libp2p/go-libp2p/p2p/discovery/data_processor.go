@@ -1,41 +1,101 @@
+
 package main
 
 import (
-	"encoding/json"
-	"fmt"
-	"log"
+    "encoding/csv"
+    "errors"
+    "io"
+    "os"
+    "strconv"
 )
 
-type UserData struct {
-	ID    int    `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
+type DataRecord struct {
+    ID    int
+    Name  string
+    Value float64
 }
 
-func ValidateAndParseJSON(rawData []byte) (*UserData, error) {
-	var user UserData
-	if err := json.Unmarshal(rawData, &user); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
-	}
+func ParseCSVFile(filename string) ([]DataRecord, error) {
+    file, err := os.Open(filename)
+    if err != nil {
+        return nil, err
+    }
+    defer file.Close()
 
-	if user.ID <= 0 {
-		return nil, fmt.Errorf("invalid user ID: %d", user.ID)
-	}
-	if user.Name == "" {
-		return nil, fmt.Errorf("user name cannot be empty")
-	}
-	if user.Email == "" {
-		return nil, fmt.Errorf("user email cannot be empty")
-	}
+    reader := csv.NewReader(file)
+    var records []DataRecord
+    lineNumber := 0
 
-	return &user, nil
+    for {
+        line, err := reader.Read()
+        if err == io.EOF {
+            break
+        }
+        if err != nil {
+            return nil, err
+        }
+
+        lineNumber++
+        if lineNumber == 1 {
+            continue
+        }
+
+        if len(line) != 3 {
+            return nil, errors.New("invalid column count at line " + strconv.Itoa(lineNumber))
+        }
+
+        id, err := strconv.Atoi(line[0])
+        if err != nil {
+            return nil, errors.New("invalid ID at line " + strconv.Itoa(lineNumber))
+        }
+
+        name := line[1]
+        if name == "" {
+            return nil, errors.New("empty name at line " + strconv.Itoa(lineNumber))
+        }
+
+        value, err := strconv.ParseFloat(line[2], 64)
+        if err != nil {
+            return nil, errors.New("invalid value at line " + strconv.Itoa(lineNumber))
+        }
+
+        records = append(records, DataRecord{
+            ID:    id,
+            Name:  name,
+            Value: value,
+        })
+    }
+
+    return records, nil
 }
 
-func main() {
-	jsonStr := `{"id": 123, "name": "John Doe", "email": "john@example.com"}`
-	user, err := ValidateAndParseJSON([]byte(jsonStr))
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Printf("Parsed user: %+v\n", user)
+func ValidateRecords(records []DataRecord) error {
+    if len(records) == 0 {
+        return errors.New("no records to validate")
+    }
+
+    idSet := make(map[int]bool)
+    for _, record := range records {
+        if record.ID <= 0 {
+            return errors.New("invalid ID: " + strconv.Itoa(record.ID))
+        }
+        if idSet[record.ID] {
+            return errors.New("duplicate ID: " + strconv.Itoa(record.ID))
+        }
+        idSet[record.ID] = true
+
+        if record.Value < 0 {
+            return errors.New("negative value for ID: " + strconv.Itoa(record.ID))
+        }
+    }
+
+    return nil
+}
+
+func CalculateTotalValue(records []DataRecord) float64 {
+    total := 0.0
+    for _, record := range records {
+        total += record.Value
+    }
+    return total
 }
