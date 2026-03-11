@@ -1,42 +1,107 @@
+
 package main
 
 import (
-	"encoding/json"
+	"encoding/csv"
 	"fmt"
-	"log"
+	"io"
+	"os"
+	"strconv"
 )
 
-type User struct {
-	ID    int    `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
+type Record struct {
+	ID    int
+	Name  string
+	Value float64
 }
 
-func ValidateJSON(data []byte) (*User, error) {
-	var user User
-	err := json.Unmarshal(data, &user)
+func ProcessCSV(filename string) ([]Record, error) {
+	file, err := os.Open(filename)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	records := []Record{}
+	lineNum := 0
+
+	for {
+		line, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("csv read error: %w", err)
+		}
+
+		lineNum++
+		if lineNum == 1 {
+			continue
+		}
+
+		if len(line) != 3 {
+			return nil, fmt.Errorf("invalid column count on line %d", lineNum)
+		}
+
+		id, err := strconv.Atoi(line[0])
+		if err != nil {
+			return nil, fmt.Errorf("invalid ID on line %d: %w", lineNum, err)
+		}
+
+		name := line[1]
+		if name == "" {
+			return nil, fmt.Errorf("empty name on line %d", lineNum)
+		}
+
+		value, err := strconv.ParseFloat(line[2], 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value on line %d: %w", lineNum, err)
+		}
+
+		records = append(records, Record{
+			ID:    id,
+			Name:  name,
+			Value: value,
+		})
 	}
 
-	if user.ID <= 0 {
-		return nil, fmt.Errorf("invalid user ID: %d", user.ID)
-	}
-	if user.Name == "" {
-		return nil, fmt.Errorf("user name cannot be empty")
-	}
-	if user.Email == "" {
-		return nil, fmt.Errorf("user email cannot be empty")
+	return records, nil
+}
+
+func CalculateStats(records []Record) (float64, float64) {
+	if len(records) == 0 {
+		return 0, 0
 	}
 
-	return &user, nil
+	var sum float64
+	var max float64 = records[0].Value
+
+	for _, r := range records {
+		sum += r.Value
+		if r.Value > max {
+			max = r.Value
+		}
+	}
+
+	average := sum / float64(len(records))
+	return average, max
 }
 
 func main() {
-	jsonData := []byte(`{"id": 123, "name": "John Doe", "email": "john@example.com"}`)
-	user, err := ValidateJSON(jsonData)
-	if err != nil {
-		log.Fatal(err)
+	if len(os.Args) < 2 {
+		fmt.Println("Usage: data_processor <csv_file>")
+		os.Exit(1)
 	}
-	fmt.Printf("Validated user: %+v\n", user)
+
+	records, err := ProcessCSV(os.Args[1])
+	if err != nil {
+		fmt.Printf("Error processing file: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Processed %d records\n", len(records))
+	avg, max := CalculateStats(records)
+	fmt.Printf("Average value: %.2f\n", avg)
+	fmt.Printf("Maximum value: %.2f\n", max)
 }
