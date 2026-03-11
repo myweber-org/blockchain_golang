@@ -1,162 +1,107 @@
+
 package main
 
 import (
 	"encoding/csv"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
 )
 
-type Record struct {
-	Name  string  `json:"name"`
-	Age   int     `json:"age"`
-	Score float64 `json:"score"`
-	Valid bool    `json:"valid"`
+type DataRecord struct {
+	ID    int
+	Name  string
+	Value float64
 }
 
-func processCSVFile(inputPath string) ([]Record, error) {
-	file, err := os.Open(inputPath)
+func ParseCSVFile(filename string) ([]DataRecord, error) {
+	file, err := os.Open(filename)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
 	defer file.Close()
 
 	reader := csv.NewReader(file)
-	records := []Record{}
-	lineNumber := 0
+	records := []DataRecord{}
+	lineNum := 0
 
 	for {
+		lineNum++
 		row, err := reader.Read()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("csv read error: %w", err)
+			return nil, fmt.Errorf("csv read error at line %d: %w", lineNum, err)
 		}
 
-		lineNumber++
-		if lineNumber == 1 {
-			continue
+		if len(row) != 3 {
+			return nil, fmt.Errorf("invalid column count at line %d: expected 3, got %d", lineNum, len(row))
 		}
 
-		if len(row) != 4 {
-			return nil, fmt.Errorf("invalid row length at line %d", lineNumber)
-		}
-
-		age, err := strconv.Atoi(row[1])
+		id, err := strconv.Atoi(row[0])
 		if err != nil {
-			return nil, fmt.Errorf("invalid age at line %d: %w", lineNumber, err)
+			return nil, fmt.Errorf("invalid ID at line %d: %w", lineNum, err)
 		}
 
-		score, err := strconv.ParseFloat(row[2], 64)
+		name := row[1]
+		if name == "" {
+			return nil, fmt.Errorf("empty name at line %d", lineNum)
+		}
+
+		value, err := strconv.ParseFloat(row[2], 64)
 		if err != nil {
-			return nil, fmt.Errorf("invalid score at line %d: %w", lineNumber, err)
+			return nil, fmt.Errorf("invalid value at line %d: %w", lineNum, err)
 		}
 
-		valid := row[3] == "true"
-
-		records = append(records, Record{
-			Name:  row[0],
-			Age:   age,
-			Score: score,
-			Valid: valid,
+		records = append(records, DataRecord{
+			ID:    id,
+			Name:  name,
+			Value: value,
 		})
+	}
+
+	if len(records) == 0 {
+		return nil, errors.New("no valid records found in file")
 	}
 
 	return records, nil
 }
 
-func convertToJSON(records []Record) (string, error) {
-	jsonData, err := json.MarshalIndent(records, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("json marshaling failed: %w", err)
+func ValidateRecords(records []DataRecord) error {
+	seenIDs := make(map[int]bool)
+	for _, record := range records {
+		if record.ID <= 0 {
+			return fmt.Errorf("invalid ID %d: must be positive", record.ID)
+		}
+		if seenIDs[record.ID] {
+			return fmt.Errorf("duplicate ID %d found", record.ID)
+		}
+		if record.Value < 0 {
+			return fmt.Errorf("negative value %f for record ID %d", record.Value, record.ID)
+		}
+		seenIDs[record.ID] = true
 	}
-	return string(jsonData), nil
-}
-
-func saveToFile(content, outputPath string) error {
-	file, err := os.Create(outputPath)
-	if err != nil {
-		return fmt.Errorf("failed to create output file: %w", err)
-	}
-	defer file.Close()
-
-	_, err = file.WriteString(content)
-	if err != nil {
-		return fmt.Errorf("failed to write to file: %w", err)
-	}
-
 	return nil
 }
 
-func main() {
-	if len(os.Args) != 3 {
-		fmt.Println("Usage: data_processor <input.csv> <output.json>")
-		os.Exit(1)
+func CalculateStatistics(records []DataRecord) (float64, float64, error) {
+	if len(records) == 0 {
+		return 0, 0, errors.New("cannot calculate statistics for empty dataset")
 	}
 
-	inputFile := os.Args[1]
-	outputFile := os.Args[2]
+	var sum float64
+	var max float64 = records[0].Value
 
-	records, err := processCSVFile(inputFile)
-	if err != nil {
-		fmt.Printf("Error processing CSV: %v\n", err)
-		os.Exit(1)
+	for _, record := range records {
+		sum += record.Value
+		if record.Value > max {
+			max = record.Value
+		}
 	}
 
-	jsonOutput, err := convertToJSON(records)
-	if err != nil {
-		fmt.Printf("Error converting to JSON: %v\n", err)
-		os.Exit(1)
-	}
-
-	err = saveToFile(jsonOutput, outputFile)
-	if err != nil {
-		fmt.Printf("Error saving file: %v\n", err)
-		os.Exit(1)
-	}
-
-	fmt.Printf("Successfully processed %d records to %s\n", len(records), outputFile)
-}package main
-
-import (
-	"encoding/json"
-	"fmt"
-	"log"
-)
-
-type UserData struct {
-	ID    int    `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
-}
-
-func ValidateAndParseJSON(rawData []byte) (*UserData, error) {
-	var user UserData
-	if err := json.Unmarshal(rawData, &user); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
-	}
-
-	if user.ID <= 0 {
-		return nil, fmt.Errorf("invalid user ID: %d", user.ID)
-	}
-	if user.Name == "" {
-		return nil, fmt.Errorf("user name cannot be empty")
-	}
-	if user.Email == "" {
-		return nil, fmt.Errorf("user email cannot be empty")
-	}
-
-	return &user, nil
-}
-
-func main() {
-	jsonStr := `{"id": 101, "name": "Alice", "email": "alice@example.com"}`
-	user, err := ValidateAndParseJSON([]byte(jsonStr))
-	if err != nil {
-		log.Fatal("Error:", err)
-	}
-	fmt.Printf("Parsed user: %+v\n", user)
+	average := sum / float64(len(records))
+	return average, max, nil
 }
