@@ -25,7 +25,7 @@ func (al *ActivityLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	duration := time.Since(start)
 	log.Printf(
-		"%s %s %d %s %s",
+		"Method: %s | Path: %s | Status: %d | Duration: %v | RemoteAddr: %s",
 		r.Method,
 		r.URL.Path,
 		recorder.statusCode,
