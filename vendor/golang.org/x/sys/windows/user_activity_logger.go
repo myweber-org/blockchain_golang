@@ -120,4 +120,74 @@ func (al *ActivityLogger) CleanupInactiveUsers(maxInactive time.Duration) {
 		}
 		al.mu.Unlock()
 	}
+}package main
+
+import (
+	"fmt"
+	"log"
+	"os"
+	"time"
+)
+
+type ActivityType string
+
+const (
+	Login    ActivityType = "LOGIN"
+	Logout   ActivityType = "LOGOUT"
+	Purchase ActivityType = "PURCHASE"
+	View     ActivityType = "VIEW"
+)
+
+type UserActivity struct {
+	UserID    string
+	Action    ActivityType
+	Timestamp time.Time
+	Details   string
+}
+
+var activityLog []UserActivity
+
+func logActivity(userID string, action ActivityType, details string) {
+	activity := UserActivity{
+		UserID:    userID,
+		Action:    action,
+		Timestamp: time.Now(),
+		Details:   details,
+	}
+	activityLog = append(activityLog, activity)
+	fmt.Printf("Logged: %s - %s at %s\n", userID, action, activity.Timestamp.Format(time.RFC3339))
+}
+
+func saveLogToFile(filename string) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	for _, activity := range activityLog {
+		line := fmt.Sprintf("%s,%s,%s,%s\n",
+			activity.UserID,
+			activity.Action,
+			activity.Timestamp.Format(time.RFC3339),
+			activity.Details)
+		_, err := file.WriteString(line)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func main() {
+	logActivity("user123", Login, "Successful login from IP 192.168.1.100")
+	logActivity("user123", View, "Viewed product page: product_456")
+	logActivity("user456", Purchase, "Purchased item: premium_subscription")
+	logActivity("user123", Logout, "Session terminated")
+
+	err := saveLogToFile("user_activities.csv")
+	if err != nil {
+		log.Fatal("Failed to save log:", err)
+	}
+	fmt.Println("Activity log saved to user_activities.csv")
 }
