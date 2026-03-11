@@ -114,3 +114,59 @@ func main() {
 
     fmt.Printf("Data cleaned successfully. Output written to %s\n", outputFile)
 }
+package main
+
+import (
+	"fmt"
+	"strings"
+)
+
+type DataRecord struct {
+	ID    int
+	Email string
+	Valid bool
+}
+
+func DeduplicateRecords(records []DataRecord) []DataRecord {
+	seen := make(map[string]bool)
+	var unique []DataRecord
+
+	for _, record := range records {
+		email := strings.ToLower(strings.TrimSpace(record.Email))
+		if !seen[email] {
+			seen[email] = true
+			record.Email = email
+			unique = append(unique, record)
+		}
+	}
+	return unique
+}
+
+func ValidateEmailFormat(email string) bool {
+	return strings.Contains(email, "@") && strings.Contains(email, ".")
+}
+
+func CleanData(records []DataRecord) []DataRecord {
+	records = DeduplicateRecords(records)
+	var cleaned []DataRecord
+
+	for _, record := range records {
+		record.Valid = ValidateEmailFormat(record.Email)
+		cleaned = append(cleaned, record)
+	}
+	return cleaned
+}
+
+func main() {
+	sampleData := []DataRecord{
+		{1, "user@example.com", false},
+		{2, "USER@example.com", false},
+		{3, "invalid-email", false},
+		{4, "test@domain.org", false},
+	}
+
+	cleaned := CleanData(sampleData)
+	for _, record := range cleaned {
+		fmt.Printf("ID: %d, Email: %s, Valid: %v\n", record.ID, record.Email, record.Valid)
+	}
+}
