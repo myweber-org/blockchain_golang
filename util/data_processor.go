@@ -383,3 +383,46 @@ func main() {
 	}
 	fmt.Printf("Valid user: %+v\n", user)
 }
+package data_processor
+
+import (
+	"regexp"
+	"strings"
+)
+
+type Processor struct {
+	whitespaceRegex *regexp.Regexp
+	emailRegex      *regexp.Regexp
+}
+
+func NewProcessor() *Processor {
+	return &Processor{
+		whitespaceRegex: regexp.MustCompile(`\s+`),
+		emailRegex:      regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`),
+	}
+}
+
+func (p *Processor) CleanString(input string) string {
+	trimmed := strings.TrimSpace(input)
+	return p.whitespaceRegex.ReplaceAllString(trimmed, " ")
+}
+
+func (p *Processor) ValidateEmail(email string) bool {
+	return p.emailRegex.MatchString(email)
+}
+
+func (p *Processor) NormalizeEmail(email string) (string, bool) {
+	cleaned := strings.ToLower(strings.TrimSpace(email))
+	if p.ValidateEmail(cleaned) {
+		return cleaned, true
+	}
+	return cleaned, false
+}
+
+func (p *Processor) ExtractDomain(email string) string {
+	parts := strings.Split(email, "@")
+	if len(parts) == 2 {
+		return parts[1]
+	}
+	return ""
+}
