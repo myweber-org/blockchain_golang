@@ -1,115 +1,92 @@
 package config
 
 import (
+    "fmt"
     "os"
-    "strconv"
-    "strings"
+    "path/filepath"
+
+    "gopkg.in/yaml.v2"
 )
 
 type DatabaseConfig struct {
-    Host     string
-    Port     int
-    Username string
-    Password string
-    Database string
-    SSLMode  string
+    Host     string `yaml:"host" env:"DB_HOST"`
+    Port     int    `yaml:"port" env:"DB_PORT"`
+    Username string `yaml:"username" env:"DB_USER"`
+    Password string `yaml:"password" env:"DB_PASS"`
+    Name     string `yaml:"name" env:"DB_NAME"`
 }
 
 type ServerConfig struct {
-    Port         int
-    ReadTimeout  int
-    WriteTimeout int
-    DebugMode    bool
+    Port         int    `yaml:"port" env:"SERVER_PORT"`
+    ReadTimeout  int    `yaml:"read_timeout" env:"READ_TIMEOUT"`
+    WriteTimeout int    `yaml:"write_timeout" env:"WRITE_TIMEOUT"`
+    Debug        bool   `yaml:"debug" env:"DEBUG"`
 }
 
-type Config struct {
-    Database DatabaseConfig
-    Server   ServerConfig
-    LogLevel string
+type AppConfig struct {
+    Database DatabaseConfig `yaml:"database"`
+    Server   ServerConfig   `yaml:"server"`
+    LogLevel string         `yaml:"log_level" env:"LOG_LEVEL"`
 }
 
-func LoadConfig() (*Config, error) {
-    dbConfig := DatabaseConfig{
-        Host:     getEnv("DB_HOST", "localhost"),
-        Port:     getEnvAsInt("DB_PORT", 5432),
-        Username: getEnv("DB_USER", "postgres"),
-        Password: getEnv("DB_PASSWORD", ""),
-        Database: getEnv("DB_NAME", "appdb"),
-        SSLMode:  getEnv("DB_SSL_MODE", "disable"),
+func LoadConfig(configPath string) (*AppConfig, error) {
+    data, err := os.ReadFile(configPath)
+    if err != nil {
+        return nil, fmt.Errorf("failed to read config file: %w", err)
     }
 
-    serverConfig := ServerConfig{
-        Port:         getEnvAsInt("SERVER_PORT", 8080),
-        ReadTimeout:  getEnvAsInt("READ_TIMEOUT", 30),
-        WriteTimeout: getEnvAsInt("WRITE_TIMEOUT", 30),
-        DebugMode:    getEnvAsBool("DEBUG_MODE", false),
+    var config AppConfig
+    if err := yaml.Unmarshal(data, &config); err != nil {
+        return nil, fmt.Errorf("failed to parse YAML: %w", err)
     }
 
-    config := &Config{
-        Database: dbConfig,
-        Server:   serverConfig,
-        LogLevel: getEnv("LOG_LEVEL", "info"),
-    }
+    overrideFromEnv(&config)
 
-    if err := validateConfig(config); err != nil {
-        return nil, err
-    }
+    return &config, nil
+}
 
-    return config, nil
+func overrideFromEnv(config *AppConfig) {
+    config.Database.Host = getEnv("DB_HOST", config.Database.Host)
+    config.Database.Port = getEnvInt("DB_PORT", config.Database.Port)
+    config.Database.Username = getEnv("DB_USER", config.Database.Username)
+    config.Database.Password = getEnv("DB_PASS", config.Database.Password)
+    config.Database.Name = getEnv("DB_NAME", config.Database.Name)
+
+    config.Server.Port = getEnvInt("SERVER_PORT", config.Server.Port)
+    config.Server.ReadTimeout = getEnvInt("READ_TIMEOUT", config.Server.ReadTimeout)
+    config.Server.WriteTimeout = getEnvInt("WRITE_TIMEOUT", config.Server.WriteTimeout)
+    config.Server.Debug = getEnvBool("DEBUG", config.Server.Debug)
+
+    config.LogLevel = getEnv("LOG_LEVEL", config.LogLevel)
 }
 
 func getEnv(key, defaultValue string) string {
-    if value, exists := os.LookupEnv(key); exists {
+    if value := os.Getenv(key); value != "" {
         return value
     }
     return defaultValue
 }
 
-func getEnvAsInt(key string, defaultValue int) int {
-    strValue := getEnv(key, "")
-    if strValue == "" {
-        return defaultValue
-    }
-    if value, err := strconv.Atoi(strValue); err == nil {
-        return value
+func getEnvInt(key string, defaultValue int) int {
+    if value := os.Getenv(key); value != "" {
+        var result int
+        if _, err := fmt.Sscanf(value, "%d", &result); err == nil {
+            return result
+        }
     }
     return defaultValue
 }
 
-func getEnvAsBool(key string, defaultValue bool) bool {
-    strValue := getEnv(key, "")
-    if strValue == "" {
-        return defaultValue
+func getEnvBool(key string, defaultValue bool) bool {
+    if value := os.Getenv(key); value != "" {
+        return value == "true" || value == "1" || value == "yes"
     }
-    strValue = strings.ToLower(strValue)
-    return strValue == "true" || strValue == "1" || strValue == "yes"
+    return defaultValue
 }
 
-func validateConfig(config *Config) error {
-    if config.Database.Port <= 0 || config.Database.Port > 65535 {
-        return &ConfigError{Field: "DB_PORT", Message: "port must be between 1 and 65535"}
+func DefaultConfigPath() string {
+    if path := os.Getenv("CONFIG_PATH"); path != "" {
+        return path
     }
-    if config.Server.Port <= 0 || config.Server.Port > 65535 {
-        return &ConfigError{Field: "SERVER_PORT", Message: "port must be between 1 and 65535"}
-    }
-    if config.Server.ReadTimeout <= 0 {
-        return &ConfigError{Field: "READ_TIMEOUT", Message: "timeout must be positive"}
-    }
-    if config.Server.WriteTimeout <= 0 {
-        return &ConfigError{Field: "WRITE_TIMEOUT", Message: "timeout must be positive"}
-    }
-    validLogLevels := map[string]bool{"debug": true, "info": true, "warn": true, "error": true}
-    if !validLogLevels[strings.ToLower(config.LogLevel)] {
-        return &ConfigError{Field: "LOG_LEVEL", Message: "invalid log level"}
-    }
-    return nil
-}
-
-type ConfigError struct {
-    Field   string
-    Message string
-}
-
-func (e *ConfigError) Error() string {
-    return "config error: " + e.Field + " - " + e.Message
+    return filepath.Join("config", "app.yaml")
 }
