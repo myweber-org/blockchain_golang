@@ -55,3 +55,50 @@ func main() {
     }
     fmt.Printf("Processed user: %+v\n", user)
 }
+package main
+
+import (
+    "encoding/json"
+    "fmt"
+    "strings"
+)
+
+// DataPayload represents a generic structure for incoming JSON data
+type DataPayload struct {
+    ID    string `json:"id"`
+    Value int    `json:"value"`
+    Tags  []string `json:"tags"`
+}
+
+// ParseAndValidateJSON parses a JSON string into a DataPayload and performs basic validation
+func ParseAndValidateJSON(input string) (*DataPayload, error) {
+    if strings.TrimSpace(input) == "" {
+        return nil, fmt.Errorf("input string is empty")
+    }
+
+    var payload DataPayload
+    err := json.Unmarshal([]byte(input), &payload)
+    if err != nil {
+        return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
+    }
+
+    if payload.ID == "" {
+        return nil, fmt.Errorf("field 'id' is required")
+    }
+    if payload.Value < 0 {
+        return nil, fmt.Errorf("field 'value' must be non-negative")
+    }
+
+    return &payload, nil
+}
+
+func main() {
+    // Example usage
+    jsonStr := `{"id": "test-123", "value": 42, "tags": ["go", "json"]}`
+    result, err := ParseAndValidateJSON(jsonStr)
+    if err != nil {
+        fmt.Printf("Error: %v\n", err)
+        return
+    }
+    fmt.Printf("Parsed payload: %+v\n", result)
+}
