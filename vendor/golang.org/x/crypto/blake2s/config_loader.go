@@ -84,4 +84,82 @@ func DefaultConfigPath() string {
     }
     
     return filepath.Join(homeDir, ".app", "config.yaml")
+}package config
+
+import (
+	"errors"
+	"io/ioutil"
+	"os"
+
+	"gopkg.in/yaml.v2"
+)
+
+type AppConfig struct {
+	Server struct {
+		Host string `yaml:"host"`
+		Port int    `yaml:"port"`
+	} `yaml:"server"`
+	Database struct {
+		Host     string `yaml:"host"`
+		Username string `yaml:"username"`
+		Password string `yaml:"password"`
+		Name     string `yaml:"name"`
+	} `yaml:"database"`
+	LogLevel string `yaml:"log_level"`
+}
+
+func LoadConfig(path string) (*AppConfig, error) {
+	if path == "" {
+		return nil, errors.New("config path cannot be empty")
+	}
+
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	data, err := ioutil.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+
+	var config AppConfig
+	err = yaml.Unmarshal(data, &config)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := validateConfig(&config); err != nil {
+		return nil, err
+	}
+
+	return &config, nil
+}
+
+func validateConfig(config *AppConfig) error {
+	if config.Server.Host == "" {
+		return errors.New("server host is required")
+	}
+	if config.Server.Port <= 0 || config.Server.Port > 65535 {
+		return errors.New("server port must be between 1 and 65535")
+	}
+	if config.Database.Host == "" {
+		return errors.New("database host is required")
+	}
+	if config.LogLevel == "" {
+		config.LogLevel = "info"
+	}
+
+	validLogLevels := map[string]bool{
+		"debug": true,
+		"info":  true,
+		"warn":  true,
+		"error": true,
+	}
+	if !validLogLevels[config.LogLevel] {
+		return errors.New("invalid log level")
+	}
+
+	return nil
 }
