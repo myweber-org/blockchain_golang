@@ -1,77 +1,60 @@
 package config
 
 import (
-	"os"
-	"path/filepath"
-
-	"gopkg.in/yaml.v3"
+    "os"
+    "strconv"
+    "strings"
 )
 
 type Config struct {
-	Server struct {
-		Host string `yaml:"host" env:"SERVER_HOST"`
-		Port int    `yaml:"port" env:"SERVER_PORT"`
-	} `yaml:"server"`
-	Database struct {
-		Host     string `yaml:"host" env:"DB_HOST"`
-		Port     int    `yaml:"port" env:"DB_PORT"`
-		Name     string `yaml:"name" env:"DB_NAME"`
-		User     string `yaml:"user" env:"DB_USER"`
-		Password string `yaml:"password" env:"DB_PASSWORD"`
-	} `yaml:"database"`
-	Logging struct {
-		Level  string `yaml:"level" env:"LOG_LEVEL"`
-		Output string `yaml:"output" env:"LOG_OUTPUT"`
-	} `yaml:"logging"`
+    DatabaseURL string
+    MaxConnections int
+    DebugMode bool
+    AllowedOrigins []string
 }
 
-func LoadConfig(configPath string) (*Config, error) {
-	absPath, err := filepath.Abs(configPath)
-	if err != nil {
-		return nil, err
-	}
+func LoadConfig(filePath string) (*Config, error) {
+    cfg := &Config{
+        DatabaseURL: "localhost:5432",
+        MaxConnections: 10,
+        DebugMode: false,
+        AllowedOrigins: []string{"http://localhost:3000"},
+    }
 
-	data, err := os.ReadFile(absPath)
-	if err != nil {
-		return nil, err
-	}
+    file, err := os.Open(filePath)
+    if err != nil {
+        return cfg, nil
+    }
+    defer file.Close()
 
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, err
-	}
+    scanner := bufio.NewScanner(file)
+    for scanner.Scan() {
+        line := scanner.Text()
+        if strings.HasPrefix(line, "#") || strings.TrimSpace(line) == "" {
+            continue
+        }
 
-	overrideFromEnv(&cfg)
-	return &cfg, nil
-}
+        parts := strings.SplitN(line, "=", 2)
+        if len(parts) != 2 {
+            continue
+        }
 
-func overrideFromEnv(cfg *Config) {
-	cfg.Server.Host = getEnvOrDefault("SERVER_HOST", cfg.Server.Host)
-	cfg.Server.Port = getEnvIntOrDefault("SERVER_PORT", cfg.Server.Port)
+        key := strings.TrimSpace(parts[0])
+        value := strings.TrimSpace(parts[1])
 
-	cfg.Database.Host = getEnvOrDefault("DB_HOST", cfg.Database.Host)
-	cfg.Database.Port = getEnvIntOrDefault("DB_PORT", cfg.Database.Port)
-	cfg.Database.Name = getEnvOrDefault("DB_NAME", cfg.Database.Name)
-	cfg.Database.User = getEnvOrDefault("DB_USER", cfg.Database.User)
-	cfg.Database.Password = getEnvOrDefault("DB_PASSWORD", cfg.Database.Password)
+        switch key {
+        case "DATABASE_URL":
+            cfg.DatabaseURL = os.ExpandEnv(value)
+        case "MAX_CONNECTIONS":
+            if val, err := strconv.Atoi(value); err == nil {
+                cfg.MaxConnections = val
+            }
+        case "DEBUG_MODE":
+            cfg.DebugMode = strings.ToLower(value) == "true"
+        case "ALLOWED_ORIGINS":
+            cfg.AllowedOrigins = strings.Split(value, ",")
+        }
+    }
 
-	cfg.Logging.Level = getEnvOrDefault("LOG_LEVEL", cfg.Logging.Level)
-	cfg.Logging.Output = getEnvOrDefault("LOG_OUTPUT", cfg.Logging.Output)
-}
-
-func getEnvOrDefault(key, defaultValue string) string {
-	if val := os.Getenv(key); val != "" {
-		return val
-	}
-	return defaultValue
-}
-
-func getEnvIntOrDefault(key string, defaultValue int) int {
-	if val := os.Getenv(key); val != "" {
-		var result int
-		if _, err := fmt.Sscanf(val, "%d", &result); err == nil {
-			return result
-		}
-	}
-	return defaultValue
+    return cfg, scanner.Err()
 }
