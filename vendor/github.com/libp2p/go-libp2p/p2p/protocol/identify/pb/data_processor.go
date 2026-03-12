@@ -115,3 +115,92 @@ func WriteProcessedData(outputPath string, records []DataRecord) error {
 
 	return nil
 }
+package main
+
+import (
+	"encoding/csv"
+	"fmt"
+	"io"
+	"os"
+	"strconv"
+)
+
+type Record struct {
+	ID    int
+	Name  string
+	Value float64
+}
+
+func ProcessCSV(filename string) ([]Record, error) {
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	records := []Record{}
+	lineNum := 0
+
+	for {
+		line, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("csv read error at line %d: %w", lineNum, err)
+		}
+
+		if len(line) != 3 {
+			return nil, fmt.Errorf("invalid column count at line %d", lineNum)
+		}
+
+		id, err := strconv.Atoi(line[0])
+		if err != nil {
+			return nil, fmt.Errorf("invalid ID at line %d: %w", lineNum, err)
+		}
+
+		name := line[1]
+		if name == "" {
+			return nil, fmt.Errorf("empty name at line %d", lineNum)
+		}
+
+		value, err := strconv.ParseFloat(line[2], 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value at line %d: %w", lineNum, err)
+		}
+
+		records = append(records, Record{
+			ID:    id,
+			Name:  name,
+			Value: value,
+		})
+		lineNum++
+	}
+
+	return records, nil
+}
+
+func CalculateTotal(records []Record) float64 {
+	total := 0.0
+	for _, r := range records {
+		total += r.Value
+	}
+	return total
+}
+
+func main() {
+	if len(os.Args) < 2 {
+		fmt.Println("Usage: data_processor <csv_file>")
+		os.Exit(1)
+	}
+
+	records, err := ProcessCSV(os.Args[1])
+	if err != nil {
+		fmt.Printf("Error processing file: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Processed %d records\n", len(records))
+	fmt.Printf("Total value: %.2f\n", CalculateTotal(records))
+}
