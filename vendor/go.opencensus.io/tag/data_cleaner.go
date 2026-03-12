@@ -119,4 +119,61 @@ func main() {
 	}
 
 	fmt.Printf("Successfully cleaned data written to %s\n", outputFile)
+}package main
+
+import (
+    "fmt"
+    "strings"
+)
+
+type DataCleaner struct {
+    duplicates map[string]bool
+}
+
+func NewDataCleaner() *DataCleaner {
+    return &DataCleaner{
+        duplicates: make(map[string]bool),
+    }
+}
+
+func (dc *DataCleaner) RemoveDuplicates(items []string) []string {
+    unique := []string{}
+    for _, item := range items {
+        normalized := dc.Normalize(item)
+        if !dc.duplicates[normalized] {
+            dc.duplicates[normalized] = true
+            unique = append(unique, item)
+        }
+    }
+    return unique
+}
+
+func (dc *DataCleaner) Normalize(input string) string {
+    return strings.ToLower(strings.TrimSpace(input))
+}
+
+func (dc *DataCleaner) Reset() {
+    dc.duplicates = make(map[string]bool)
+}
+
+func main() {
+    cleaner := NewDataCleaner()
+    
+    sampleData := []string{
+        "  Apple  ",
+        "apple",
+        "BANANA",
+        "  banana  ",
+        "Cherry",
+        "cherry ",
+        "Date",
+    }
+    
+    fmt.Println("Original data:", sampleData)
+    
+    cleaned := cleaner.RemoveDuplicates(sampleData)
+    fmt.Println("Cleaned data:", cleaned)
+    
+    cleaner.Reset()
+    fmt.Println("Cleaner reset completed")
 }
