@@ -271,3 +271,140 @@ func main() {
 
 	fmt.Println("Log rotation test completed. Check app.log.* files.")
 }
+package main
+
+import (
+	"fmt"
+	"io"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+)
+
+const (
+	maxFileSize   = 10 * 1024 * 1024 // 10MB
+	maxBackupFiles = 5
+	logExtension  = ".log"
+	backupPrefix  = "backup_"
+	compressExt   = ".gz"
+)
+
+type RotatingLogger struct {
+	mu         sync.Mutex
+	file       *os.File
+	currentSize int64
+	basePath   string
+	writer     io.Writer
+}
+
+func NewRotatingLogger(path string) (*RotatingLogger, error) {
+	rl := &RotatingLogger{
+		basePath: path,
+	}
+
+	if err := rl.openCurrentLog(); err != nil {
+		return nil, err
+	}
+
+	rl.writer = io.MultiWriter(rl.file, os.Stdout)
+	return rl, nil
+}
+
+func (rl *RotatingLogger) openCurrentLog() error {
+	file, err := os.OpenFile(rl.basePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+
+	info, err := file.Stat()
+	if err != nil {
+		file.Close()
+		return err
+	}
+
+	rl.file = file
+	rl.currentSize = info.Size()
+	return nil
+}
+
+func (rl *RotatingLogger) Write(p []byte) (n int, err error) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	if rl.currentSize+int64(len(p)) > maxFileSize {
+		if err := rl.rotate(); err != nil {
+			log.Printf("Rotation failed: %v", err)
+		}
+	}
+
+	n, err = rl.writer.Write(p)
+	if err == nil {
+		rl.currentSize += int64(n)
+	}
+	return n, err
+}
+
+func (rl *RotatingLogger) rotate() error {
+	if rl.file != nil {
+		rl.file.Close()
+	}
+
+	backupDir := filepath.Dir(rl.basePath)
+	baseName := filepath.Base(rl.basePath)
+	nameWithoutExt := strings.TrimSuffix(baseName, logExtension)
+
+	timestamp := time.Now().Format("20060102_150405")
+	backupPath := filepath.Join(backupDir, fmt.Sprintf("%s%s%s", backupPrefix, nameWithoutExt, timestamp+logExtension))
+
+	if err := os.Rename(rl.basePath, backupPath); err != nil {
+		return err
+	}
+
+	rl.cleanupOldBackups(backupDir, nameWithoutExt)
+	return rl.openCurrentLog()
+}
+
+func (rl *RotatingLogger) cleanupOldBackups(dir, baseName string) {
+	pattern := filepath.Join(dir, backupPrefix+baseName+"*"+logExtension)
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return
+	}
+
+	if len(matches) <= maxBackupFiles {
+		return
+	}
+
+	oldestFirst := matches[:len(matches)-maxBackupFiles]
+	for _, path := range oldestFirst {
+		os.Remove(path)
+	}
+}
+
+func (rl *RotatingLogger) Close() error {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	if rl.file != nil {
+		return rl.file.Close()
+	}
+	return nil
+}
+
+func main() {
+	logger, err := NewRotatingLogger("application.log")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer logger.Close()
+
+	log.SetOutput(logger)
+
+	for i := 0; i < 1000; i++ {
+		log.Printf("Log entry %d: Application is running normally", i)
+		time.Sleep(10 * time.Millisecond)
+	}
+}
