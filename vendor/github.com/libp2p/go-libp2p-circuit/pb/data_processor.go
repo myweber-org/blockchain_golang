@@ -114,3 +114,37 @@ func main() {
 	fmt.Printf("Average Score: %.2f\n", averageScore)
 	fmt.Printf("Total Records Processed: %d\n", len(records))
 }
+package main
+
+import (
+	"regexp"
+	"strings"
+)
+
+func SanitizeUsername(input string) (string, error) {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return "", ErrEmptyInput
+	}
+
+	pattern := `^[a-zA-Z0-9_\-\.]+$`
+	matched, err := regexp.MatchString(pattern, trimmed)
+	if err != nil {
+		return "", err
+	}
+	if !matched {
+		return "", ErrInvalidCharacters
+	}
+
+	if len(trimmed) > 50 {
+		return "", ErrInputTooLong
+	}
+
+	return trimmed, nil
+}
+
+var (
+	ErrEmptyInput         = errors.New("input cannot be empty")
+	ErrInvalidCharacters  = errors.New("input contains invalid characters")
+	ErrInputTooLong       = errors.New("input exceeds maximum length")
+)
