@@ -86,3 +86,96 @@ func overrideBool(field *bool, envVar string) {
         *field = val == "true" || val == "1" || val == "yes"
     }
 }
+package config
+
+import (
+	"os"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+type Config struct {
+	Server struct {
+		Host string `yaml:"host" env:"SERVER_HOST"`
+		Port int    `yaml:"port" env:"SERVER_PORT"`
+	} `yaml:"server"`
+	Database struct {
+		Host     string `yaml:"host" env:"DB_HOST"`
+		Port     int    `yaml:"port" env:"DB_PORT"`
+		Name     string `yaml:"name" env:"DB_NAME"`
+		User     string `yaml:"user" env:"DB_USER"`
+		Password string `yaml:"password" env:"DB_PASSWORD"`
+		SSLMode  string `yaml:"ssl_mode" env:"DB_SSL_MODE"`
+	} `yaml:"database"`
+	Logging struct {
+		Level  string `yaml:"level" env:"LOG_LEVEL"`
+		Format string `yaml:"format" env:"LOG_FORMAT"`
+	} `yaml:"logging"`
+}
+
+func LoadConfig(configPath string) (*Config, error) {
+	config := &Config{}
+
+	file, err := os.Open(configPath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	decoder := yaml.NewDecoder(file)
+	if err := decoder.Decode(config); err != nil {
+		return nil, err
+	}
+
+	overrideWithEnvVars(config)
+
+	return config, nil
+}
+
+func overrideWithEnvVars(config *Config) {
+	overrideField := func(field *string, envVar string) {
+		if val := os.Getenv(envVar); val != "" {
+			*field = val
+		}
+	}
+
+	overrideField(&config.Server.Host, "SERVER_HOST")
+	overrideField(&config.Database.Host, "DB_HOST")
+	overrideField(&config.Database.Name, "DB_NAME")
+	overrideField(&config.Database.User, "DB_USER")
+	overrideField(&config.Database.Password, "DB_PASSWORD")
+	overrideField(&config.Database.SSLMode, "DB_SSL_MODE")
+	overrideField(&config.Logging.Level, "LOG_LEVEL")
+	overrideField(&config.Logging.Format, "LOG_FORMAT")
+
+	if val := os.Getenv("SERVER_PORT"); val != "" {
+		if port, err := parseInt(val); err == nil {
+			config.Server.Port = port
+		}
+	}
+
+	if val := os.Getenv("DB_PORT"); val != "" {
+		if port, err := parseInt(val); err == nil {
+			config.Database.Port = port
+		}
+	}
+}
+
+func parseInt(s string) (int, error) {
+	var result int
+	_, err := fmt.Sscanf(s, "%d", &result)
+	return result, err
+}
+
+func (c *Config) GetDSN() string {
+	parts := []string{
+		"host=" + c.Database.Host,
+		"port=" + fmt.Sprintf("%d", c.Database.Port),
+		"dbname=" + c.Database.Name,
+		"user=" + c.Database.User,
+		"password=" + c.Database.Password,
+		"sslmode=" + c.Database.SSLMode,
+	}
+	return strings.Join(parts, " ")
+}
