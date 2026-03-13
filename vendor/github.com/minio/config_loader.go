@@ -155,4 +155,96 @@ func validateConfig(c *ServerConfig) error {
     }
 
     return nil
+}package config
+
+import (
+	"encoding/json"
+	"os"
+	"strings"
+)
+
+type DatabaseConfig struct {
+	Host     string `json:"host" env:"DB_HOST" validate:"required"`
+	Port     int    `json:"port" env:"DB_PORT" validate:"min=1,max=65535"`
+	Username string `json:"username" env:"DB_USER"`
+	Password string `json:"-" env:"DB_PASS"`
+	SSLMode  string `json:"ssl_mode" env:"DB_SSL_MODE" default:"disable"`
+}
+
+type ServerConfig struct {
+	Port         int    `json:"port" env:"SERVER_PORT" default:"8080"`
+	ReadTimeout  int    `json:"read_timeout" env:"SERVER_READ_TIMEOUT" default:"30"`
+	WriteTimeout int    `json:"write_timeout" env:"SERVER_WRITE_TIMEOUT" default:"30"`
+	DebugMode    bool   `json:"debug_mode" env:"DEBUG_MODE" default:"false"`
+}
+
+type Config struct {
+	Database DatabaseConfig `json:"database"`
+	Server   ServerConfig   `json:"server"`
+	LogLevel string         `json:"log_level" env:"LOG_LEVEL" default:"info"`
+}
+
+func LoadConfig(configPath string) (*Config, error) {
+	config := &Config{}
+	
+	if configPath != "" {
+		file, err := os.Open(configPath)
+		if err != nil {
+			return nil, err
+		}
+		defer file.Close()
+		
+		decoder := json.NewDecoder(file)
+		if err := decoder.Decode(config); err != nil {
+			return nil, err
+		}
+	}
+	
+	overrideFromEnv(config)
+	
+	if err := validateConfig(config); err != nil {
+		return nil, err
+	}
+	
+	return config, nil
+}
+
+func overrideFromEnv(config *Config) {
+	overrideStruct(config)
+}
+
+func validateConfig(config *Config) error {
+	if config.Database.Host == "" {
+		return NewValidationError("database host is required")
+	}
+	
+	if config.Database.Port < 1 || config.Database.Port > 65535 {
+		return NewValidationError("database port must be between 1 and 65535")
+	}
+	
+	if config.Server.Port < 1 || config.Server.Port > 65535 {
+		return NewValidationError("server port must be between 1 and 65535")
+	}
+	
+	validLogLevels := map[string]bool{
+		"debug": true, "info": true, "warn": true, "error": true,
+	}
+	
+	if !validLogLevels[strings.ToLower(config.LogLevel)] {
+		return NewValidationError("invalid log level")
+	}
+	
+	return nil
+}
+
+type ValidationError struct {
+	Message string
+}
+
+func NewValidationError(msg string) *ValidationError {
+	return &ValidationError{Message: msg}
+}
+
+func (e *ValidationError) Error() string {
+	return e.Message
 }
