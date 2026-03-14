@@ -213,4 +213,72 @@ func (al *ActivityLogger) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		r.RemoteAddr,
 		duration,
 	)
+}package main
+
+import (
+	"fmt"
+	"log"
+	"time"
+	"crypto/rand"
+	"encoding/hex"
+)
+
+type ActivityLog struct {
+	SessionID  string
+	UserID     string
+	Action     string
+	Timestamp  time.Time
+	Metadata   map[string]string
+}
+
+func generateSessionID() string {
+	bytes := make([]byte, 16)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		log.Fatal("Failed to generate session ID")
+	}
+	return hex.EncodeToString(bytes)
+}
+
+func NewActivityLog(userID, action string) *ActivityLog {
+	return &ActivityLog{
+		SessionID: generateSessionID(),
+		UserID:    userID,
+		Action:    action,
+		Timestamp: time.Now().UTC(),
+		Metadata:  make(map[string]string),
+	}
+}
+
+func (al *ActivityLog) AddMetadata(key, value string) {
+	al.Metadata[key] = value
+}
+
+func (al *ActivityLog) FormatLog() string {
+	metadataStr := ""
+	for k, v := range al.Metadata {
+		metadataStr += fmt.Sprintf(" %s=%s", k, v)
+	}
+	return fmt.Sprintf("[%s] Session:%s User:%s Action:%s%s",
+		al.Timestamp.Format(time.RFC3339),
+		al.SessionID[:8],
+		al.UserID,
+		al.Action,
+		metadataStr)
+}
+
+func main() {
+	logger := NewActivityLog("user123", "login")
+	logger.AddMetadata("ip", "192.168.1.100")
+	logger.AddMetadata("browser", "chrome")
+	
+	fmt.Println(logger.FormatLog())
+	
+	time.Sleep(2 * time.Second)
+	
+	logger2 := NewActivityLog("user123", "upload")
+	logger2.AddMetadata("file", "document.pdf")
+	logger2.AddMetadata("size", "2.5MB")
+	
+	fmt.Println(logger2.FormatLog())
 }
